@@ -26,7 +26,36 @@ go.work.sum
 
 # env file
 .env
+.env.*
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Frontend
+node_modules/
+dist/
+.vite/
+web/*.log
+pnpm-debug.log*
+
+# Local app data
+server/data/
+server/storage/
+server/.gocache/
+server/.gomodcache/
+web/.pnpm-store/
+
+# Database / temp artifacts
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.pid
