@@ -5,6 +5,7 @@
         <div>
           <a-space wrap>
             <a-tag color="blue">模型</a-tag>
+            <a-tag v-if="detail.recommend_tag" color="orange">{{ detail.recommend_tag }}</a-tag>
             <span v-for="tag in detail.tags" :key="tag" class="pill-meta">{{ tag }}</span>
           </a-space>
           <h1 class="section-title" style="margin-top: 10px">{{ detail.name }}</h1>
@@ -38,6 +39,13 @@
         <a-space wrap style="margin-bottom: 12px">
           <span v-for="dependency in detail.dependencies" :key="dependency" class="pill-meta">{{ dependency }}</span>
         </a-space>
+        <a-alert
+          v-if="detail.review_comment && detail.status === 'rejected'"
+          type="warning"
+          show-icon
+          style="margin-bottom: 16px"
+          :message="`驳回原因：${detail.review_comment}`"
+        />
         <a-table :data-source="detail.versions" :pagination="false" row-key="id" size="small">
           <a-table-column title="版本" data-index="version" />
           <a-table-column title="文件" data-index="file_name" />
@@ -46,6 +54,59 @@
             <template #default="{ record }">{{ formatDate(record.created_at) }}</template>
           </a-table-column>
         </a-table>
+
+        <div v-if="detail.versions.length > 1" class="compare-section">
+          <div class="compare-head">
+            <div>
+              <h3>历史版本对比</h3>
+              <p class="section-subtitle">选择两个版本，快速比较文件、时间和变更说明。</p>
+            </div>
+          </div>
+          <a-row :gutter="[12, 12]" class="compare-toolbar">
+            <a-col :xs="24" :md="12">
+              <a-select v-model:value="leftVersionId" style="width: 100%" placeholder="选择左侧版本">
+                <a-select-option v-for="item in detail.versions" :key="item.id" :value="item.id">{{ item.version }}</a-select-option>
+              </a-select>
+            </a-col>
+            <a-col :xs="24" :md="12">
+              <a-select v-model:value="rightVersionId" style="width: 100%" placeholder="选择右侧版本">
+                <a-select-option v-for="item in detail.versions" :key="item.id" :value="item.id">{{ item.version }}</a-select-option>
+              </a-select>
+            </a-col>
+          </a-row>
+
+          <a-row v-if="leftVersion && rightVersion" :gutter="[16, 16]" class="compare-grid">
+            <a-col :xs="24" :lg="12">
+              <a-card class="compare-card" :title="leftVersion.version">
+                <p><strong>文件：</strong>{{ leftVersion.file_name }}</p>
+                <p><strong>时间：</strong>{{ formatDate(leftVersion.created_at) }}</p>
+                <p><strong>说明：</strong>{{ leftVersion.changelog || '无' }}</p>
+              </a-card>
+            </a-col>
+            <a-col :xs="24" :lg="12">
+              <a-card class="compare-card" :title="rightVersion.version">
+                <p><strong>文件：</strong>{{ rightVersion.file_name }}</p>
+                <p><strong>时间：</strong>{{ formatDate(rightVersion.created_at) }}</p>
+                <p><strong>说明：</strong>{{ rightVersion.changelog || '无' }}</p>
+              </a-card>
+            </a-col>
+            <a-col :span="24">
+              <a-card class="compare-summary-card" title="差异摘要">
+                <a-space wrap>
+                  <a-tag :color="leftVersion.file_name === rightVersion.file_name ? 'default' : 'blue'">
+                    {{ leftVersion.file_name === rightVersion.file_name ? '文件未变化' : '文件已变化' }}
+                  </a-tag>
+                  <a-tag :color="leftVersion.changelog === rightVersion.changelog ? 'default' : 'purple'">
+                    {{ leftVersion.changelog === rightVersion.changelog ? '版本说明一致' : '版本说明已变化' }}
+                  </a-tag>
+                  <a-tag color="gold">
+                    时间跨度 {{ compareDuration }}
+                  </a-tag>
+                </a-space>
+              </a-card>
+            </a-col>
+          </a-row>
+        </div>
       </a-card>
 
       <a-row :gutter="[16, 16]" style="margin-top: 16px">
@@ -112,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -125,6 +186,8 @@ const detail = ref<ModelDetail>();
 const evaluations = ref<ModelEvaluationItem[]>([]);
 const ratings = ref<RatingSummary>();
 const comments = ref<CommentItem[]>([]);
+const leftVersionId = ref<number>();
+const rightVersionId = ref<number>();
 const ratingForm = reactive({
   score: 5,
   feedback: '',
@@ -151,6 +214,8 @@ async function load() {
   evaluations.value = evaluationItems;
   ratings.value = ratingSummary;
   comments.value = commentItems;
+  leftVersionId.value = model.versions[1]?.id ?? model.versions[0]?.id;
+  rightVersionId.value = model.versions[0]?.id;
 }
 
 async function toggleFavorite() {
@@ -224,6 +289,17 @@ function formatDate(value: string) {
   return new Date(value).toLocaleString();
 }
 
+const leftVersion = computed(() => detail.value?.versions.find((item) => item.id === leftVersionId.value));
+const rightVersion = computed(() => detail.value?.versions.find((item) => item.id === rightVersionId.value));
+const compareDuration = computed(() => {
+  if (!leftVersion.value || !rightVersion.value) {
+    return '0 天';
+  }
+  const diff = Math.abs(new Date(rightVersion.value.created_at).getTime() - new Date(leftVersion.value.created_at).getTime());
+  const days = Math.max(1, Math.round(diff / (24 * 60 * 60 * 1000)));
+  return `${days} 天`;
+});
+
 function readCompareIds() {
   const raw = localStorage.getItem('open-community-model-compare');
   if (!raw) return [] as number[];
@@ -244,5 +320,22 @@ onMounted(load);
 
 .inner-card {
   border-radius: 18px;
+}
+
+.compare-section {
+  margin-top: 20px;
+}
+
+.compare-toolbar {
+  margin-top: 12px;
+}
+
+.compare-grid {
+  margin-top: 16px;
+}
+
+.compare-card,
+.compare-summary-card {
+  border-radius: 16px;
 }
 </style>
