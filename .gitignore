@@ -51,6 +51,7 @@ server/data/
 server/storage/
 server/.gocache/
 server/.gomodcache/
+server/*.log
 web/.pnpm-store/
 
 # Database / temp artifacts
