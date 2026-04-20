@@ -118,6 +118,14 @@ func (s *VerificationService) Review(id, reviewerID uint, input dto.Verification
 	if err := s.repo.Update(item); err != nil {
 		return err
 	}
+	if input.Decision == "approved" && s.users != nil {
+		if user, userErr := s.users.FindByID(item.UserID); userErr == nil {
+			if user.Role == model.RoleUser {
+				user.Role = model.RoleDeveloper
+				_ = s.users.Update(user)
+			}
+		}
+	}
 
 	title := "开发者认证审核结果"
 	content := "你的认证申请已审核"

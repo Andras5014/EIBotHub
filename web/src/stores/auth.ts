@@ -1,6 +1,7 @@
 import { createPinia, defineStore } from 'pinia';
 
 import { api } from '@/api';
+import { ROLE_SUPER_ADMIN, resolvePermissions } from '@/constants/permissions';
 import type { UserSummary } from '@/types/api';
 
 export const pinia = createPinia();
@@ -15,7 +16,12 @@ export const useAuthStore = defineStore('auth', {
   }),
   getters: {
     isAuthenticated: (state) => Boolean(state.token),
-    isAdmin: (state) => state.user?.role === 'admin',
+    permissions: (state) => resolvePermissions(state.user ?? undefined),
+    isAdmin: (state) => ['admin', ROLE_SUPER_ADMIN].includes(state.user?.role ?? ''),
+    isSuperAdmin: (state) => state.user?.role === ROLE_SUPER_ADMIN,
+    isOperator: (state) => state.user?.role === 'operator',
+    isReviewer: (state) => state.user?.role === 'reviewer',
+    hasBackofficeAccess: (state) => resolvePermissions(state.user ?? undefined).length > 0,
   },
   actions: {
     async login(payload: { email: string; password: string }) {
@@ -51,6 +57,15 @@ export const useAuthStore = defineStore('auth', {
       this.user = user;
       localStorage.setItem(TOKEN_KEY, token);
       localStorage.setItem(USER_KEY, JSON.stringify(user));
+    },
+    hasRole(roles: string[]) {
+      return this.isSuperAdmin || roles.includes(this.user?.role ?? '');
+    },
+    hasPermission(permission: string) {
+      return this.isSuperAdmin || this.permissions.includes(permission);
+    },
+    hasAnyPermission(permissions: string[]) {
+      return this.isSuperAdmin || permissions.some((permission) => this.permissions.includes(permission));
     },
   },
 });

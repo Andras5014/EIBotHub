@@ -4,11 +4,11 @@
       <div class="section-head">
         <div>
           <h1 class="section-title">内容管理</h1>
-          <p class="section-subtitle">统一维护模板、案例、文档分类、文档、FAQ 和视频教程，并支持批量状态操作与日志查看。</p>
+          <p class="section-subtitle">统一维护模板、案例、文档分类、筛选字典、FAQ 和视频教程，并支持批量状态操作与日志查看。</p>
         </div>
       </div>
 
-      <a-tabs>
+      <a-tabs class="content-tabs">
         <a-tab-pane key="templates" tab="任务模板">
           <a-row :gutter="[16, 16]">
             <a-col :xs="24" :lg="10">
@@ -365,6 +365,101 @@
           </a-row>
         </a-tab-pane>
 
+        <a-tab-pane key="filter-options" tab="筛选字典">
+          <a-row :gutter="[16, 16]">
+            <a-col :xs="24" :lg="10">
+              <a-card title="字典项列表" class="inner-card">
+                <div class="batch-bar">
+                  <a-select v-model:value="filterOptionKindFilter" :options="filterOptionListOptions" style="min-width: 220px" />
+                  <a-tag>{{ displayedFilterOptions.length }} 项</a-tag>
+                </div>
+                <a-list :data-source="displayedFilterOptions">
+                  <template #renderItem="{ item }">
+                    <a-list-item class="clickable-item">
+                      <template #actions>
+                        <a-button type="link" @click="startEditFilterOption(item)">编辑</a-button>
+                        <a-button danger type="link" @click="deleteFilterOption(item.id)">删除</a-button>
+                      </template>
+                      <a-list-item-meta :title="item.value" :description="`${filterOptionKindLabel(item.kind)} · 排序 ${item.sort_order}`" />
+                      <template #extra>
+                        <a-tag :color="item.enabled ? 'green' : 'default'">{{ item.enabled ? '启用' : '停用' }}</a-tag>
+                      </template>
+                    </a-list-item>
+                  </template>
+                </a-list>
+              </a-card>
+            </a-col>
+
+            <a-col :xs="24" :lg="14">
+              <a-card :title="filterOptionEditingId ? '编辑字典项' : '新增字典项'" class="inner-card">
+                <p class="form-hint">后台配置项会优先展示，未配置但已被资源实际使用的值仍会自动补齐到前台筛选器。</p>
+                <a-form :model="filterOptionForm" layout="vertical" @finish="saveFilterOption">
+                  <a-row :gutter="[16, 0]">
+                    <a-col :xs="24" :sm="12">
+                      <a-form-item label="字典类型">
+                        <a-select v-model:value="filterOptionForm.kind" :options="filterOptionKindOptions" />
+                      </a-form-item>
+                    </a-col>
+                    <a-col :xs="24" :sm="12">
+                      <a-form-item label="排序值">
+                        <a-input-number v-model:value="filterOptionForm.sort_order" :min="0" :max="1000" style="width: 100%" />
+                      </a-form-item>
+                    </a-col>
+                  </a-row>
+                  <a-form-item label="展示值">
+                    <a-input v-model:value="filterOptionForm.value" placeholder="例如：协同控制 / 夜间安防 / 巡检机器人" />
+                  </a-form-item>
+                  <a-form-item label="启用">
+                    <a-switch v-model:checked="filterOptionForm.enabled" />
+                  </a-form-item>
+                  <a-space>
+                    <a-button type="primary" html-type="submit">{{ filterOptionEditingId ? '保存' : '新增' }}</a-button>
+                    <a-button @click="resetFilterOptionForm">重置</a-button>
+                  </a-space>
+                </a-form>
+              </a-card>
+            </a-col>
+          </a-row>
+        </a-tab-pane>
+
+        <a-tab-pane key="model-recommend-tags" tab="模型推荐标签">
+          <a-row :gutter="[16, 16]">
+            <a-col :xs="24">
+              <a-card title="模型推荐标签维护" class="inner-card">
+                <a-list :data-source="modelRecommendTags">
+                  <template #renderItem="{ item }">
+                    <a-list-item>
+                      <a-list-item-meta>
+                        <template #title>
+                          <a-space wrap>
+                            <span>{{ item.name }}</span>
+                            <a-tag :color="item.status === 'published' ? 'green' : item.status === 'pending' ? 'gold' : item.status === 'rejected' ? 'red' : 'default'">
+                              {{ item.status || 'draft' }}
+                            </a-tag>
+                            <span class="section-subtitle">作者 {{ item.owner_name }}</span>
+                          </a-space>
+                        </template>
+                        <template #description>{{ item.summary }}</template>
+                      </a-list-item-meta>
+                      <template #actions>
+                        <div class="recommend-tag-editor">
+                          <a-input
+                            :value="modelRecommendTagForms[item.id] ?? item.recommend_tag"
+                            placeholder="例如：编辑推荐 / 高性能 / 场景优选"
+                            style="width: 240px"
+                            @update:value="(value: string) => updateModelRecommendTagForm(item.id, value)"
+                          />
+                          <a-button type="primary" @click="saveModelRecommendTag(item.id)">保存</a-button>
+                        </div>
+                      </template>
+                    </a-list-item>
+                  </template>
+                </a-list>
+              </a-card>
+            </a-col>
+          </a-row>
+        </a-tab-pane>
+
         <a-tab-pane key="logs" tab="操作日志">
           <a-card title="最近操作" class="inner-card">
             <a-list :data-source="operationLogs">
@@ -391,17 +486,19 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
-import { message } from 'ant-design-vue';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { message, Modal } from 'ant-design-vue';
 
 import { api } from '@/api';
 import type {
   AgreementTemplateItem,
+  AdminModelRecommendTagItem,
   AdminOperationLogItem,
   ApplicationCaseItem,
   DatasetPrivacyOptionItem,
   DocumentCategoryItem,
   DocumentItem,
+  FilterOptionConfigItem,
   FAQItem,
   TaskTemplateItem,
   VideoTutorialItem,
@@ -427,6 +524,8 @@ const faqs = ref<FAQItem[]>([]);
 const videos = ref<VideoTutorialItem[]>([]);
 const agreementTemplates = ref<AgreementTemplateItem[]>([]);
 const privacyOptions = ref<DatasetPrivacyOptionItem[]>([]);
+const filterOptionConfigs = ref<FilterOptionConfigItem[]>([]);
+const modelRecommendTags = ref<AdminModelRecommendTagItem[]>([]);
 const operationLogs = ref<AdminOperationLogItem[]>([]);
 
 const selectedTemplateIds = ref<number[]>([]);
@@ -446,6 +545,8 @@ const faqEditingId = ref<number>();
 const videoEditingId = ref<number>();
 const agreementTemplateEditingId = ref<number>();
 const privacyOptionEditingId = ref<number>();
+const filterOptionEditingId = ref<number>();
+const filterOptionKindFilter = ref('');
 
 const templateForm = reactive({
   name: '',
@@ -510,10 +611,36 @@ const privacyOptionForm = reactive({
   active: true,
 });
 
+const filterOptionKindOptions = [
+  { label: '通用标签', value: 'tag' },
+  { label: '模型标签', value: 'model_tag' },
+  { label: '数据集标签', value: 'dataset_tag' },
+  { label: '机器人类型', value: 'robot_type' },
+  { label: '数据集场景', value: 'dataset_scene' },
+  { label: '模板分类', value: 'template_category' },
+  { label: '模板场景', value: 'template_scene' },
+  { label: '案例分类', value: 'application_case_category' },
+];
+
+const filterOptionListOptions = [{ label: '全部类型', value: '' }, ...filterOptionKindOptions];
+
+const filterOptionForm = reactive({
+  kind: 'tag',
+  value: '',
+  sort_order: 10,
+  enabled: true,
+});
+
 const docCategoryOptions = ref<Array<{ label: string; value: number }>>([]);
+const modelRecommendTagForms = reactive<Record<number, string>>({});
+const displayedFilterOptions = computed(() =>
+  filterOptionKindFilter.value
+    ? filterOptionConfigs.value.filter((item) => item.kind === filterOptionKindFilter.value)
+    : filterOptionConfigs.value,
+);
 
 async function load() {
-  const [templateItems, caseItems, categoryItems, documentItems, faqItems, videoItems, agreementTemplateItems, privacyOptionItems, logItems] = await Promise.all([
+  const [templateItems, caseItems, categoryItems, documentItems, faqItems, videoItems, agreementTemplateItems, privacyOptionItems, filterOptionItems, modelRecommendTagItems, logItems] = await Promise.all([
     api.getAdminTemplates(),
     api.getAdminApplicationCases(),
     api.getAdminDocCategories(),
@@ -522,6 +649,8 @@ async function load() {
     api.getAdminVideos(),
     api.getAdminAgreementTemplates(),
     api.getAdminPrivacyOptions(),
+    api.getAdminFilterOptions(),
+    api.getAdminModelRecommendTags(),
     api.getAdminOperationLogs(),
   ]);
   templates.value = templateItems;
@@ -532,11 +661,16 @@ async function load() {
   videos.value = videoItems;
   agreementTemplates.value = agreementTemplateItems;
   privacyOptions.value = privacyOptionItems;
+  filterOptionConfigs.value = filterOptionItems;
+  modelRecommendTags.value = modelRecommendTagItems;
   operationLogs.value = logItems;
   docCategoryOptions.value = categoryItems.map((item) => ({
     label: `${item.name} · ${item.doc_type}`,
     value: item.id,
   }));
+  for (const item of modelRecommendTagItems) {
+    modelRecommendTagForms[item.id] = item.recommend_tag;
+  }
 }
 
 function toggleSelection(target: number[], id: number, checked: boolean) {
@@ -576,6 +710,7 @@ async function saveTemplate() {
 }
 
 async function deleteTemplate(id: number) {
+  if (!(await confirmDanger('确认删除模板？', '删除后该模板将无法恢复。'))) return;
   await api.deleteAdminTemplate(id);
   message.success('模板已删除');
   await load();
@@ -589,6 +724,7 @@ async function batchUpdateTemplates() {
 }
 
 async function batchDeleteTemplates() {
+  if (!(await confirmDanger('确认批量删除模板？', '批量删除后所选模板将无法恢复。'))) return;
   await api.batchDeleteAdminTemplates({ ids: selectedTemplateIds.value });
   selectedTemplateIds.value = [];
   message.success('模板已批量删除');
@@ -632,6 +768,7 @@ async function saveApplicationCase() {
 }
 
 async function deleteCase(id: number) {
+  if (!(await confirmDanger('确认删除案例？', '删除后该案例将无法恢复。'))) return;
   await api.deleteAdminApplicationCase(id);
   message.success('案例已删除');
   await load();
@@ -645,6 +782,7 @@ async function batchUpdateCases() {
 }
 
 async function batchDeleteCases() {
+  if (!(await confirmDanger('确认批量删除案例？', '批量删除后所选案例将无法恢复。'))) return;
   await api.batchDeleteAdminApplicationCases({ ids: selectedCaseIds.value });
   selectedCaseIds.value = [];
   message.success('案例已批量删除');
@@ -684,6 +822,7 @@ async function saveCategory() {
 }
 
 async function deleteCategory(id: number) {
+  if (!(await confirmDanger('确认删除分类？', '删除后该文档分类将无法恢复。'))) return;
   try {
     await api.deleteAdminDocCategory(id);
     message.success('分类已删除');
@@ -730,6 +869,7 @@ async function saveDocument() {
 }
 
 async function deleteDocument(id: number) {
+  if (!(await confirmDanger('确认删除文档？', '删除后该文档将无法恢复。'))) return;
   await api.deleteAdminDocument(id);
   message.success('文档已删除');
   await load();
@@ -743,6 +883,7 @@ async function batchUpdateDocuments() {
 }
 
 async function batchDeleteDocuments() {
+  if (!(await confirmDanger('确认批量删除文档？', '批量删除后所选文档将无法恢复。'))) return;
   await api.batchDeleteAdminDocuments({ ids: selectedDocumentIds.value });
   selectedDocumentIds.value = [];
   message.success('文档已批量删除');
@@ -782,6 +923,7 @@ async function saveFaq() {
 }
 
 async function deleteFaq(id: number) {
+  if (!(await confirmDanger('确认删除 FAQ？', '删除后该 FAQ 将无法恢复。'))) return;
   await api.deleteAdminFaq(id);
   message.success('FAQ 已删除');
   await load();
@@ -812,6 +954,7 @@ async function saveVideo() {
 }
 
 async function deleteVideo(id: number) {
+  if (!(await confirmDanger('确认删除视频？', '删除后该视频将无法恢复。'))) return;
   await api.deleteAdminVideo(id);
   message.success('视频已删除');
   await load();
@@ -825,6 +968,7 @@ async function batchUpdateVideos() {
 }
 
 async function batchDeleteVideos() {
+  if (!(await confirmDanger('确认批量删除视频？', '批量删除后所选视频将无法恢复。'))) return;
   await api.batchDeleteAdminVideos({ ids: selectedVideoIds.value });
   selectedVideoIds.value = [];
   message.success('视频已批量删除');
@@ -864,6 +1008,7 @@ async function saveAgreementTemplate() {
 }
 
 async function deleteAgreementTemplate(id: number) {
+  if (!(await confirmDanger('确认删除协议模板？', '删除后该协议模板将无法恢复。'))) return;
   await api.deleteAdminAgreementTemplate(id);
   message.success('协议模板已删除');
   await load();
@@ -898,6 +1043,7 @@ async function savePrivacyOption() {
 }
 
 async function deletePrivacyOption(id: number) {
+  if (!(await confirmDanger('确认删除权限级别？', '删除后该权限级别将无法恢复。'))) return;
   await api.deleteAdminPrivacyOption(id);
   message.success('权限级别已删除');
   await load();
@@ -921,13 +1067,82 @@ function resetPrivacyOptionForm() {
   privacyOptionForm.active = true;
 }
 
+async function saveFilterOption() {
+  if (filterOptionEditingId.value) {
+    await api.updateAdminFilterOption(filterOptionEditingId.value, filterOptionForm);
+    message.success('筛选字典已更新');
+  } else {
+    await api.createAdminFilterOption(filterOptionForm);
+    message.success('筛选字典已创建');
+  }
+  resetFilterOptionForm();
+  await load();
+}
+
+async function deleteFilterOption(id: number) {
+  if (!(await confirmDanger('确认删除筛选字典？', '删除后该筛选字典将无法恢复。'))) return;
+  await api.deleteAdminFilterOption(id);
+  if (filterOptionEditingId.value === id) {
+    resetFilterOptionForm();
+  }
+  message.success('筛选字典已删除');
+  await load();
+}
+
+function startEditFilterOption(item: FilterOptionConfigItem) {
+  filterOptionEditingId.value = item.id;
+  filterOptionForm.kind = item.kind;
+  filterOptionForm.value = item.value;
+  filterOptionForm.sort_order = item.sort_order;
+  filterOptionForm.enabled = item.enabled;
+}
+
+function resetFilterOptionForm() {
+  filterOptionEditingId.value = undefined;
+  filterOptionForm.kind = 'tag';
+  filterOptionForm.value = '';
+  filterOptionForm.sort_order = 10;
+  filterOptionForm.enabled = true;
+}
+
+function updateModelRecommendTagForm(id: number, value: string) {
+  modelRecommendTagForms[id] = value;
+}
+
+async function saveModelRecommendTag(id: number) {
+  await api.updateAdminModelRecommendTag(id, {
+    recommend_tag: modelRecommendTagForms[id] ?? '',
+  });
+  message.success('模型推荐标签已更新');
+  await load();
+}
+
+function filterOptionKindLabel(kind: string) {
+  return filterOptionKindOptions.find((item) => item.value === kind)?.label ?? kind;
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleString('zh-CN');
+}
+
+function confirmDanger(title: string, content: string) {
+  return new Promise<boolean>((resolve) => {
+    Modal.confirm({
+      title,
+      content,
+      okType: 'danger',
+      okText: '确认',
+      cancelText: '取消',
+      onOk: () => resolve(true),
+      onCancel: () => resolve(false),
+    });
+  });
 }
 
 onMounted(async () => {
   await load();
   resetDocumentForm();
+  resetFilterOptionForm();
 });
 </script>
 
@@ -952,8 +1167,36 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
+.content-tabs :deep(.ant-tabs-nav-list) {
+  flex-wrap: wrap;
+}
+
+.content-tabs :deep(.ant-tabs-tab) {
+  margin-bottom: 8px;
+}
+
+.form-hint {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+}
+
+.recommend-tag-editor {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .log-meta {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .content-tabs :deep(.ant-row > .ant-col-8),
+  .content-tabs :deep(.ant-row > .ant-col-12) {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
 }
 </style>

@@ -2,10 +2,12 @@ package middleware
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Andras5014/EIBotHub/server/internal/model"
 	"github.com/Andras5014/EIBotHub/server/internal/support"
 )
 
@@ -53,11 +55,45 @@ func AdminRequired(tokens *support.TokenManager) gin.HandlerFunc {
 		}
 
 		claims := MustClaims(c)
-		if claims.Role != "admin" {
+		if !model.IsAdminRole(claims.Role) {
 			support.RespondError(c, support.NewError(http.StatusForbidden, "forbidden", "admin access required"))
 			c.Abort()
 			return
 		}
+	}
+}
+
+func RoleRequired(roles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims := MustClaims(c)
+		if claims.UserID == 0 {
+			support.RespondError(c, support.NewError(http.StatusUnauthorized, "unauthorized", "login required"))
+			c.Abort()
+			return
+		}
+		if claims.Role != model.RoleSuperAdmin && !slices.Contains(roles, claims.Role) {
+			support.RespondError(c, support.NewError(http.StatusForbidden, "forbidden", "insufficient role permissions"))
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func PermissionRequired(permissions ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims := MustClaims(c)
+		if claims.UserID == 0 {
+			support.RespondError(c, support.NewError(http.StatusUnauthorized, "unauthorized", "login required"))
+			c.Abort()
+			return
+		}
+		if !model.HasAllPermissions(claims.Role, permissions...) {
+			support.RespondError(c, support.NewError(http.StatusForbidden, "forbidden", "insufficient permission"))
+			c.Abort()
+			return
+		}
+		c.Next()
 	}
 }
 

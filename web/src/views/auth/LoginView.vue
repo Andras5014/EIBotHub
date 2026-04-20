@@ -2,8 +2,11 @@
   <div class="page-shell">
     <div class="auth-wrap">
       <div class="page-card auth-card">
-        <h1 class="section-title">登录开放社区</h1>
-        <p class="section-subtitle">MVP 默认账号：`demo@example.com / Demo123!`，后台账号：`admin@opencommunity.local / Admin123!`</p>
+        <div class="login-brand">
+          <BrandLogo />
+        </div>
+        <h1 class="section-title">登录 EIBotHub</h1>
+        <p class="section-subtitle">默认账号：`demo@example.com / Demo123!`，后台账号：`admin@opencommunity.local / Admin123!`</p>
 
         <a-form :model="form" layout="vertical" @finish="submit">
           <a-form-item label="邮箱" name="email" :rules="[{ required: true, message: '请输入邮箱' }]">
@@ -47,6 +50,7 @@ import { reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import BrandLogo from '@/components/BrandLogo.vue';
 import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
@@ -103,5 +107,9 @@ async function register() {
 .auth-card {
   width: min(560px, 100%);
   padding: 28px;
+}
+
+.login-brand {
+  margin-bottom: 20px;
 }
 </style>

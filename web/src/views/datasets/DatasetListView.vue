@@ -16,7 +16,21 @@
           <a-input v-model:value="filters.q" placeholder="名称 / 标签 / 场景" />
         </a-form-item>
         <a-form-item label="标签" name="tags">
-          <a-input v-model:value="filters.tags" placeholder="如：inspection" />
+          <a-select v-model:value="tagValues" mode="multiple" allow-clear style="width: 220px" placeholder="选择标签">
+            <a-select-option v-for="item in filterOptions.dataset_tags" :key="item" :value="item">{{ item }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="场景" name="scene">
+          <a-select v-model:value="sceneValue" allow-clear style="width: 180px" placeholder="选择场景">
+            <a-select-option v-for="item in filterOptions.dataset_scenes" :key="item" :value="item">{{ item }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="排序" name="sort">
+          <a-select v-model:value="filters.sort" style="width: 140px">
+            <a-select-option value="downloads">按热度</a-select-option>
+            <a-select-option value="latest">最近更新</a-select-option>
+            <a-select-option value="name">按名称</a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item>
           <a-button html-type="submit" type="primary">筛选</a-button>
@@ -36,20 +50,40 @@ import { RouterLink } from 'vue-router';
 
 import { api } from '@/api';
 import ResourceCards from '@/components/ResourceCards.vue';
-import type { ResourceCard } from '@/types/api';
+import type { FilterOptionsResponse, ResourceCard } from '@/types/api';
 
 const filters = reactive({
   q: '',
-  tags: '',
+  scene: '',
+  sort: 'downloads',
 });
 const items = ref<ResourceCard[]>([]);
+const tagValues = ref<string[]>([]);
+const sceneValue = ref('');
+const filterOptions = ref<FilterOptionsResponse>({
+  tags: [],
+  model_tags: [],
+  dataset_tags: [],
+  robot_types: [],
+  dataset_scenes: [],
+  template_categories: [],
+  template_scenes: [],
+  application_case_categories: [],
+});
 
 async function load() {
-  const response = await api.listDatasets(filters);
+  const response = await api.listDatasets({
+    ...filters,
+    tags: tagValues.value.join(','),
+    scene: sceneValue.value || undefined,
+  });
   items.value = response.items;
 }
 
-onMounted(load);
+onMounted(async () => {
+  filterOptions.value = await api.getFilterOptions();
+  await load();
+});
 </script>
 
 <style scoped>

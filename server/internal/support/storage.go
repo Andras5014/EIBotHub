@@ -10,6 +10,14 @@ import (
 	"time"
 )
 
+type ObjectStorage interface {
+	SaveUploadedFile(resourceType string, fileHeader *multipart.FileHeader) (string, string, error)
+	WriteSeedFile(resourceType, fileName, content string) (string, error)
+	WriteGeneratedFile(resourceType, fileName, content string) (string, error)
+	ResolvePath(relativePath string) string
+	SplitFile(sourceRelativePath, targetDir, baseName string, parts int) ([]string, error)
+}
+
 type LocalStorage struct {
 	root string
 }

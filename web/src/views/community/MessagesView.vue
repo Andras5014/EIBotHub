@@ -23,7 +23,18 @@
             <a-list :data-source="conversations">
               <template #renderItem="{ item }">
                 <a-list-item :class="{ active: selectedConversation?.id === item.id }" @click="selectConversation(item)" style="cursor: pointer">
-                  <a-list-item-meta :title="item.title || item.participant_names.join(' / ')" :description="item.latest_message || '暂无消息'" />
+                  <a-list-item-meta>
+                    <template #title>
+                      <a-space wrap>
+                        <span>{{ item.title || item.participant_names.join(' / ') }}</span>
+                        <a-tag :color="item.active ? 'green' : 'red'">{{ item.active ? '正常' : '已封禁' }}</a-tag>
+                      </a-space>
+                    </template>
+                    <template #description>
+                      <div>{{ item.latest_message || '暂无消息' }}</div>
+                      <div v-if="item.blocked_reason" class="blocked-text">封禁原因：{{ item.blocked_reason }}</div>
+                    </template>
+                  </a-list-item-meta>
                 </a-list-item>
               </template>
             </a-list>
@@ -35,7 +46,17 @@
               <a-space wrap style="margin-bottom: 12px">
                 <span class="pill-meta">会话类型：{{ selectedConversation.kind }}</span>
                 <span v-for="name in selectedConversation.participant_names" :key="name" class="pill-meta">{{ name }}</span>
+                <a-tag :color="selectedConversation.active ? 'green' : 'red'">
+                  {{ selectedConversation.active ? '正常' : '已封禁' }}
+                </a-tag>
               </a-space>
+              <a-alert
+                v-if="!selectedConversation.active"
+                type="warning"
+                show-icon
+                :message="selectedConversation.blocked_reason || '当前会话已被管理员封禁，暂不可继续发送或查看消息。'"
+                style="margin-bottom: 16px"
+              />
               <a-list :data-source="messages">
                 <template #renderItem="{ item }">
                   <a-list-item>
@@ -45,8 +66,12 @@
               </a-list>
               <a-divider />
               <a-form :model="replyForm" layout="vertical" @finish="sendReply">
-                <a-form-item label="回复内容"><a-textarea v-model:value="replyForm.content" :rows="3" /></a-form-item>
-                <a-form-item><a-button type="primary" html-type="submit">回复</a-button></a-form-item>
+                <a-form-item label="回复内容">
+                  <a-textarea v-model:value="replyForm.content" :rows="3" :disabled="!selectedConversation.active" />
+                </a-form-item>
+                <a-form-item>
+                  <a-button type="primary" html-type="submit" :disabled="!selectedConversation.active">回复</a-button>
+                </a-form-item>
               </a-form>
             </template>
             <a-empty v-else description="请选择一个会话" />
@@ -85,6 +110,11 @@ async function loadConversations() {
 
 async function selectConversation(item: ConversationItem) {
   selectedConversation.value = item;
+  if (!item.active) {
+    messages.value = [];
+    router.replace({ query: { ...route.query, conversation: String(item.id) } });
+    return;
+  }
   messages.value = await api.getConversationMessages(item.id);
   router.replace({ query: { ...route.query, conversation: String(item.id) } });
 }
@@ -110,6 +140,10 @@ async function sendDirect() {
 
 async function sendReply() {
   if (!selectedConversation.value) return;
+  if (!selectedConversation.value.active) {
+    message.error('当前会话已被封禁');
+    return;
+  }
   try {
     await api.sendMessage({
       conversation_id: selectedConversation.value.id,
@@ -177,5 +211,10 @@ function formatDate(value: string) {
 .active {
   background: var(--surface-soft);
   border-radius: 14px;
+}
+
+.blocked-text {
+  margin-top: 4px;
+  color: #cf1322;
 }
 </style>

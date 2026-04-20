@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
+import { PERMISSIONS, resolvePermissions } from '@/constants/permissions';
+
 const HomeView = () => import('@/views/home/HomeView.vue');
 const SearchView = () => import('@/views/home/SearchView.vue');
 const LoginView = () => import('@/views/auth/LoginView.vue');
@@ -10,6 +12,8 @@ const ModelDetailView = () => import('@/views/models/ModelDetailView.vue');
 const DatasetListView = () => import('@/views/datasets/DatasetListView.vue');
 const DatasetUploadView = () => import('@/views/datasets/DatasetUploadView.vue');
 const DatasetDetailView = () => import('@/views/datasets/DatasetDetailView.vue');
+const SceneListView = () => import('@/views/scenes/SceneListView.vue');
+const SceneDetailView = () => import('@/views/scenes/SceneDetailView.vue');
 const TemplateListView = () => import('@/views/templates/TemplateListView.vue');
 const TemplateDetailView = () => import('@/views/templates/TemplateDetailView.vue');
 const ApplicationCaseListView = () => import('@/views/templates/ApplicationCaseListView.vue');
@@ -45,10 +49,14 @@ export const router = createRouter({
     { path: '/models', name: 'models', component: ModelListView },
     { path: '/models/compare', name: 'model-compare', component: ModelCompareView },
     { path: '/models/upload', name: 'model-upload', component: ModelUploadView, meta: { requiresAuth: true } },
+    { path: '/models/:id/edit', name: 'model-edit', component: ModelUploadView, meta: { requiresAuth: true }, props: true },
     { path: '/models/:id', name: 'model-detail', component: ModelDetailView, props: true },
     { path: '/datasets', name: 'datasets', component: DatasetListView },
     { path: '/datasets/upload', name: 'dataset-upload', component: DatasetUploadView, meta: { requiresAuth: true } },
+    { path: '/datasets/:id/edit', name: 'dataset-edit', component: DatasetUploadView, meta: { requiresAuth: true }, props: true },
     { path: '/datasets/:id', name: 'dataset-detail', component: DatasetDetailView, props: true },
+    { path: '/scenes', name: 'scenes', component: SceneListView },
+    { path: '/scenes/:slug', name: 'scene-detail', component: SceneDetailView, props: true },
     { path: '/templates', name: 'templates', component: TemplateListView },
     { path: '/templates/:id', name: 'template-detail', component: TemplateDetailView, props: true },
     { path: '/applications', name: 'applications', component: ApplicationCaseListView },
@@ -65,15 +73,15 @@ export const router = createRouter({
     { path: '/community/users/:id', name: 'public-user', component: PublicUserView, props: true },
     { path: '/messages', name: 'messages', component: MessagesView, meta: { requiresAuth: true } },
     { path: '/workspaces', name: 'workspaces', component: WorkspacesView, meta: { requiresAuth: true } },
-    { path: '/admin', name: 'admin-dashboard', component: AdminDashboardView, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/portal', name: 'admin-portal', component: AdminPortalView, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/dataset-access', name: 'admin-dataset-access', component: AdminDatasetAccessView, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/reviews', name: 'admin-reviews', component: AdminReviewsView, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/announcements', name: 'admin-announcements', component: AdminAnnouncementsView, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/content', name: 'admin-content', component: AdminContentView, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/community', name: 'admin-community', component: AdminCommunityView, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/verifications', name: 'admin-verifications', component: AdminVerificationView, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/rewards', name: 'admin-rewards', component: AdminRewardsView, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/admin', name: 'admin-dashboard', component: AdminDashboardView, meta: { requiresAuth: true, requiredPermissions: [PERMISSIONS.dashboardView] } },
+    { path: '/admin/portal', name: 'admin-portal', component: AdminPortalView, meta: { requiresAuth: true, requiredPermissions: [PERMISSIONS.portalAccess] } },
+    { path: '/admin/dataset-access', name: 'admin-dataset-access', component: AdminDatasetAccessView, meta: { requiresAuth: true, requiredPermissions: [PERMISSIONS.datasetAccessAccess] } },
+    { path: '/admin/reviews', name: 'admin-reviews', component: AdminReviewsView, meta: { requiresAuth: true, requiredPermissions: [PERMISSIONS.reviewAccess] } },
+    { path: '/admin/announcements', name: 'admin-announcements', component: AdminAnnouncementsView, meta: { requiresAuth: true, requiredPermissions: [PERMISSIONS.announcementManage] } },
+    { path: '/admin/content', name: 'admin-content', component: AdminContentView, meta: { requiresAuth: true, requiredPermissions: [PERMISSIONS.contentAccess] } },
+    { path: '/admin/community', name: 'admin-community', component: AdminCommunityView, meta: { requiresAuth: true, requiredPermissions: [PERMISSIONS.communityAccess] } },
+    { path: '/admin/verifications', name: 'admin-verifications', component: AdminVerificationView, meta: { requiresAuth: true, requiredPermissions: [PERMISSIONS.verificationAccess] } },
+    { path: '/admin/rewards', name: 'admin-rewards', component: AdminRewardsView, meta: { requiresAuth: true, requiredPermissions: [PERMISSIONS.rewardAccess] } },
   ],
   scrollBehavior() {
     return { top: 0 };
@@ -83,12 +91,20 @@ export const router = createRouter({
 router.beforeEach((to) => {
   const token = localStorage.getItem('open-community-token');
   const user = localStorage.getItem('open-community-user');
-  const parsedUser = user ? (JSON.parse(user) as { role?: string }) : null;
+  const parsedUser = user ? (JSON.parse(user) as { role?: string; permissions?: string[] }) : null;
 
   if (to.meta.requiresAuth && !token) {
     return { name: 'login', query: { redirect: to.fullPath } };
   }
-  if (to.meta.requiresAdmin && parsedUser?.role !== 'admin') {
+  const requiredPermissions = Array.isArray(to.meta.requiredPermissions) ? (to.meta.requiredPermissions as string[]) : [];
+  if (requiredPermissions.length) {
+    const permissions = resolvePermissions(parsedUser ?? undefined);
+    if (!requiredPermissions.every((permission) => permissions.includes(permission))) {
+      return { name: 'home' };
+    }
+  }
+  const allowedRoles = Array.isArray(to.meta.allowedRoles) ? (to.meta.allowedRoles as string[]) : [];
+  if (allowedRoles.length && !allowedRoles.includes(parsedUser?.role ?? '')) {
     return { name: 'home' };
   }
   return true;

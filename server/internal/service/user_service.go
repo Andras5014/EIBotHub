@@ -10,14 +10,15 @@ import (
 )
 
 type UserService struct {
-	users     *repository.UserRepository
-	activity  *repository.UserActivityRepository
-	models    *ModelService
-	datasets  *DatasetService
+	users    *repository.UserRepository
+	activity *repository.UserActivityRepository
+	models   *ModelService
+	datasets *DatasetService
+	reviews  *repository.ReviewRepository
 }
 
-func NewUserService(users *repository.UserRepository, activity *repository.UserActivityRepository, models *ModelService, datasets *DatasetService) *UserService {
-	return &UserService{users: users, activity: activity, models: models, datasets: datasets}
+func NewUserService(users *repository.UserRepository, activity *repository.UserActivityRepository, models *ModelService, datasets *DatasetService, reviews *repository.ReviewRepository) *UserService {
+	return &UserService{users: users, activity: activity, models: models, datasets: datasets, reviews: reviews}
 }
 
 func (s *UserService) Profile(userID uint) (*dto.UserSummary, error) {
@@ -36,6 +37,7 @@ func (s *UserService) PublicProfile(userID uint) (*dto.UserSummary, error) {
 	}
 	summary := toUserSummary(*user)
 	summary.Email = ""
+	summary.Permissions = nil
 	return &summary, nil
 }
 
@@ -91,12 +93,56 @@ func (s *UserService) Uploads(userID uint) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := s.attachReviewComments(models, "models"); err != nil {
+		return nil, err
+	}
 	datasets, err := s.datasets.Mine(userID)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.attachReviewComments(datasets, "datasets"); err != nil {
 		return nil, err
 	}
 	return map[string]any{
 		"models":   models,
 		"datasets": datasets,
 	}, nil
+}
+
+func (s *UserService) attachReviewComments(items []dto.ResourceCard, reviewType string) error {
+	if s.reviews == nil || len(items) == 0 {
+		return nil
+	}
+	ids := make([]uint, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	latestLogs, err := s.reviews.ListLatestByResourceIDs(reviewType, ids)
+	if err != nil {
+		return err
+	}
+	for index := range items {
+		if items[index].Status != model.StatusRejected {
+			continue
+		}
+		if logItem, ok := latestLogs[items[index].ID]; ok && logItem.Decision == "rejected" {
+			items[index].ReviewComment = logItem.Comment
+		}
+	}
+	return nil
+}
+
+func latestReviewComment(reviews *repository.ReviewRepository, reviewType string, resourceID uint, status string, isOwner bool) (string, bool, error) {
+	if reviews == nil || !isOwner || status != model.StatusRejected {
+		return "", false, nil
+	}
+	latestLogs, err := reviews.ListLatestByResourceIDs(reviewType, []uint{resourceID})
+	if err != nil {
+		return "", false, err
+	}
+	logItem, ok := latestLogs[resourceID]
+	if !ok || logItem.Decision != "rejected" {
+		return "", false, nil
+	}
+	return logItem.Comment, true, nil
 }

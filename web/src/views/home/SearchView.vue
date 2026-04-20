@@ -30,8 +30,12 @@
         </a-radio-group>
 
         <div class="filter-grid">
-          <a-input v-model:value="tags" placeholder="标签筛选，多个逗号分隔" />
-          <a-input v-model:value="robotType" placeholder="适用机器人，如：搬运" />
+          <a-select v-model:value="tagValues" mode="multiple" allow-clear placeholder="标签筛选">
+            <a-select-option v-for="item in filterOptions.tags" :key="item" :value="item">{{ item }}</a-select-option>
+          </a-select>
+          <a-select v-model:value="robotType" allow-clear placeholder="适用机器人">
+            <a-select-option v-for="item in filterOptions.robot_types" :key="item" :value="item">{{ item }}</a-select-option>
+          </a-select>
           <a-select v-model:value="sort">
             <a-select-option value="hot">按热度</a-select-option>
             <a-select-option value="latest">按时间</a-select-option>
@@ -47,7 +51,7 @@
         </div>
 
         <a-row :gutter="[16, 16]">
-          <a-col :xs="24" :lg="12">
+          <a-col :xs="24" :lg="8">
             <a-card title="热门搜索">
               <a-space wrap>
                 <a-tag v-for="item in hotQueries" :key="item.query" color="blue" style="cursor: pointer" @click="applyHot(item.query)">
@@ -56,11 +60,51 @@
               </a-space>
             </a-card>
           </a-col>
-          <a-col :xs="24" :lg="12">
+          <a-col :xs="24" :lg="8">
+            <a-card title="推荐搜索">
+              <a-space wrap>
+                <a-tag v-for="item in recommendedQueries" :key="item.query" color="gold" style="cursor: pointer" @click="applyHot(item.query)">
+                  {{ item.query }}
+                </a-tag>
+              </a-space>
+            </a-card>
+          </a-col>
+          <a-col :xs="24" :lg="8">
             <a-card title="最近搜索">
               <a-space wrap>
                 <a-tag v-for="item in recentQueries" :key="item" style="cursor: pointer" @click="applyHot(item)">
                   {{ item }}
+                </a-tag>
+              </a-space>
+            </a-card>
+          </a-col>
+        </a-row>
+
+        <a-row v-if="keyword.trim()" :gutter="[16, 16]">
+          <a-col :xs="24" :lg="9">
+            <a-card title="结果概览">
+              <a-empty v-if="!typeCounts.length" description="暂无聚合结果" />
+              <a-list v-else :data-source="typeCounts" size="small">
+                <template #renderItem="{ item }">
+                  <a-list-item class="summary-row" @click="applyType(item.type)">
+                    <span>{{ item.label }}</span>
+                    <a-tag>{{ item.count }}</a-tag>
+                  </a-list-item>
+                </template>
+              </a-list>
+            </a-card>
+          </a-col>
+          <a-col :xs="24" :lg="15">
+            <a-card title="相关关键词">
+              <a-space wrap>
+                <a-tag
+                  v-for="item in suggestedQueries"
+                  :key="item.query"
+                  color="processing"
+                  style="cursor: pointer"
+                  @click="applyHot(item.query)"
+                >
+                  {{ item.query }}
                 </a-tag>
               </a-space>
             </a-card>
@@ -94,47 +138,106 @@
             </template>
           </a-list>
         </a-spin>
+
+        <a-row v-if="keyword.trim() && (sameTypeItems.length || relatedItems.length)" :gutter="[16, 16]">
+          <a-col :xs="24" :lg="12">
+            <a-card :title="sameTypeTitle">
+              <a-empty v-if="!sameTypeItems.length" description="暂无同类推荐" />
+              <a-list v-else :data-source="sameTypeItems" size="small">
+                <template #renderItem="{ item }">
+                  <a-list-item>
+                    <RouterLink :to="item.route">
+                      <div class="list-title">{{ item.title }}</div>
+                      <div class="list-desc">{{ item.summary }}</div>
+                    </RouterLink>
+                  </a-list-item>
+                </template>
+              </a-list>
+            </a-card>
+          </a-col>
+          <a-col :xs="24" :lg="12">
+            <a-card title="关联推荐">
+              <a-empty v-if="!relatedItems.length" description="暂无关联推荐" />
+              <a-list v-else :data-source="relatedItems" size="small">
+                <template #renderItem="{ item }">
+                  <a-list-item>
+                    <RouterLink :to="item.route">
+                      <div class="list-title">{{ item.title }}</div>
+                      <div class="list-desc">{{ typeLabel(item.type) }} · {{ item.summary }}</div>
+                    </RouterLink>
+                  </a-list-item>
+                </template>
+              </a-list>
+            </a-card>
+          </a-col>
+        </a-row>
       </a-space>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 
 import { api } from '@/api';
-import type { SearchHotItem, SearchItem } from '@/types/api';
+import type { FilterOptionsResponse, SearchHotItem, SearchItem, SearchSuggestionItem, SearchTypeCountItem } from '@/types/api';
 
 const route = useRoute();
 const router = useRouter();
 const keyword = ref(String(route.query.q ?? ''));
 const type = ref(String(route.query.type ?? ''));
-const tags = ref(String(route.query.tags ?? ''));
+const tagValues = ref<string[]>(readCSVQuery(route.query.tags));
 const robotType = ref(String(route.query.robot_type ?? ''));
 const sort = ref(String(route.query.sort ?? 'hot'));
 const updatedWithin = ref(Number(route.query.updated_within ?? 0));
 const results = ref<SearchItem[]>([]);
+const sameTypeItems = ref<SearchItem[]>([]);
+const relatedItems = ref<SearchItem[]>([]);
+const suggestedQueries = ref<SearchSuggestionItem[]>([]);
+const typeCounts = ref<SearchTypeCountItem[]>([]);
+const focusType = ref('');
 const hotQueries = ref<SearchHotItem[]>([]);
+const recommendedQueries = ref<SearchSuggestionItem[]>([]);
 const recentQueries = ref<string[]>(readRecentQueries());
 const loading = ref(false);
 const error = ref('');
 const total = ref(0);
+const filterOptions = ref<FilterOptionsResponse>({
+  tags: [],
+  model_tags: [],
+  dataset_tags: [],
+  robot_types: [],
+  dataset_scenes: [],
+  template_categories: [],
+  template_scenes: [],
+  application_case_categories: [],
+});
 
 watch(
   () => route.fullPath,
   async () => {
     keyword.value = String(route.query.q ?? '');
     type.value = String(route.query.type ?? '');
-    tags.value = String(route.query.tags ?? '');
+    tagValues.value = readCSVQuery(route.query.tags);
     robotType.value = String(route.query.robot_type ?? '');
     sort.value = String(route.query.sort ?? 'hot');
     updatedWithin.value = Number(route.query.updated_within ?? 0);
-    hotQueries.value = await api.hotQueries();
+    const [hotQueryItems, recommendedQueryItems] = await Promise.all([
+      api.hotQueries(),
+      api.recommendedQueries(),
+    ]);
+    hotQueries.value = hotQueryItems;
+    recommendedQueries.value = recommendedQueryItems;
 
     if (!keyword.value.trim()) {
       results.value = [];
       total.value = 0;
+      sameTypeItems.value = [];
+      relatedItems.value = [];
+      suggestedQueries.value = [];
+      typeCounts.value = [];
+      focusType.value = '';
       error.value = '';
       return;
     }
@@ -145,16 +248,26 @@ watch(
       const response = await api.search({
         q: keyword.value,
         type: type.value || undefined,
-        tags: tags.value || undefined,
+        tags: tagValues.value.join(',') || undefined,
         robot_type: robotType.value || undefined,
         sort: sort.value,
         updated_within: updatedWithin.value || undefined,
       });
       results.value = response.items;
       total.value = response.total;
+      sameTypeItems.value = response.same_type_items;
+      relatedItems.value = response.related_items;
+      suggestedQueries.value = response.suggested_queries;
+      typeCounts.value = response.type_counts;
+      focusType.value = response.focus_type ?? '';
     } catch (loadError) {
       results.value = [];
       total.value = 0;
+      sameTypeItems.value = [];
+      relatedItems.value = [];
+      suggestedQueries.value = [];
+      typeCounts.value = [];
+      focusType.value = '';
       error.value = loadError instanceof Error ? loadError.message : '搜索失败';
     } finally {
       loading.value = false;
@@ -171,7 +284,7 @@ function submit() {
     query: {
       q: keyword.value || undefined,
       type: type.value || undefined,
-      tags: tags.value || undefined,
+      tags: tagValues.value.length ? tagValues.value.join(',') : undefined,
       robot_type: robotType.value || undefined,
       sort: sort.value || undefined,
       updated_within: updatedWithin.value || undefined,
@@ -196,9 +309,18 @@ function applyHot(value: string) {
   submit();
 }
 
+function applyType(value: string) {
+  type.value = value;
+  submit();
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('zh-CN');
 }
+
+const sameTypeTitle = computed(() => {
+  return focusType.value ? `${typeLabel(focusType.value)}同类推荐` : '同类推荐';
+});
 
 function saveRecentQuery(value: string) {
   const trimmed = value.trim();
@@ -216,6 +338,17 @@ function readRecentQueries() {
     return [];
   }
 }
+
+function readCSVQuery(value: unknown) {
+  return String(value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+onMounted(async () => {
+  filterOptions.value = await api.getFilterOptions();
+});
 </script>
 
 <style scoped>
@@ -252,6 +385,10 @@ function readRecentQueries() {
 
 .search-summary {
   color: var(--text-secondary);
+}
+
+.summary-row {
+  cursor: pointer;
 }
 
 @media (max-width: 960px) {

@@ -1,9 +1,12 @@
 package service
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 
 	"github.com/Andras5014/EIBotHub/server/internal/dto"
 	"github.com/Andras5014/EIBotHub/server/internal/model"
@@ -213,10 +216,15 @@ func (s *AdminService) ModuleSettings() ([]dto.ModuleSettingItem, error) {
 	result := make([]dto.ModuleSettingItem, 0, len(defaultHomeModuleKeys))
 	for _, key := range defaultHomeModuleKeys {
 		if item, ok := byKey[key]; ok {
+			sortOrder := item.SortOrder
+			if sortOrder == 0 {
+				sortOrder = defaultModuleSortOrders()[key]
+			}
 			result = append(result, dto.ModuleSettingItem{
 				ID:        item.ID,
 				ModuleKey: key,
 				Label:     homeModuleLabels[key],
+				SortOrder: sortOrder,
 				Enabled:   item.Enabled,
 				UpdatedAt: item.UpdatedAt,
 			})
@@ -225,6 +233,7 @@ func (s *AdminService) ModuleSettings() ([]dto.ModuleSettingItem, error) {
 		result = append(result, dto.ModuleSettingItem{
 			ModuleKey: key,
 			Label:     homeModuleLabels[key],
+			SortOrder: defaultModuleSortOrders()[key],
 			Enabled:   true,
 		})
 	}
@@ -237,8 +246,289 @@ func (s *AdminService) UpdateModuleSetting(moduleKey string, input dto.ModuleSet
 	}
 	return s.portal.UpsertModuleSetting(&model.HomeModuleSetting{
 		ModuleKey: moduleKey,
+		SortOrder: input.SortOrder,
 		Enabled:   input.Enabled,
 	})
+}
+
+func (s *AdminService) HomeHeroConfig() (*dto.HomeHeroConfigItem, error) {
+	item, err := s.portal.GetHomeHeroConfig()
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || item == nil {
+			return defaultHeroConfig(), nil
+		}
+		return nil, err
+	}
+	return &dto.HomeHeroConfigItem{
+		ID:              item.ID,
+		Tagline:         item.Tagline,
+		Title:           item.Title,
+		Description:     item.Description,
+		PrimaryButton:   item.PrimaryButton,
+		SecondaryButton: item.SecondaryButton,
+		SearchButton:    item.SearchButton,
+		UpdatedAt:       item.UpdatedAt,
+	}, nil
+}
+
+func (s *AdminService) UpdateHomeHeroConfig(input dto.HomeHeroConfigRequest) (*dto.HomeHeroConfigItem, error) {
+	item := &model.HomeHeroConfig{
+		Tagline:         input.Tagline,
+		Title:           input.Title,
+		Description:     input.Description,
+		PrimaryButton:   input.PrimaryButton,
+		SecondaryButton: input.SecondaryButton,
+		SearchButton:    input.SearchButton,
+	}
+	if err := s.portal.UpsertHomeHeroConfig(item); err != nil {
+		return nil, err
+	}
+	updated, err := s.portal.GetHomeHeroConfig()
+	if err != nil {
+		return nil, err
+	}
+	return &dto.HomeHeroConfigItem{
+		ID:              updated.ID,
+		Tagline:         updated.Tagline,
+		Title:           updated.Title,
+		Description:     updated.Description,
+		PrimaryButton:   updated.PrimaryButton,
+		SecondaryButton: updated.SecondaryButton,
+		SearchButton:    updated.SearchButton,
+		UpdatedAt:       updated.UpdatedAt,
+	}, nil
+}
+
+func (s *AdminService) HomeHighlights() ([]dto.HomeHighlightItem, error) {
+	items, err := s.portal.ListHomeHighlights(false)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.HomeHighlightItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, dto.HomeHighlightItem{
+			ID:        item.ID,
+			Text:      item.Text,
+			SortOrder: item.SortOrder,
+			Enabled:   item.Enabled,
+			UpdatedAt: item.UpdatedAt,
+		})
+	}
+	return result, nil
+}
+
+func (s *AdminService) CreateHomeHighlight(input dto.HomeHighlightRequest) (*dto.HomeHighlightItem, error) {
+	item := &model.HomeHighlight{
+		Text:      input.Text,
+		SortOrder: input.SortOrder,
+		Enabled:   input.Enabled,
+	}
+	if err := s.portal.CreateHomeHighlight(item); err != nil {
+		return nil, err
+	}
+	return &dto.HomeHighlightItem{
+		ID:        item.ID,
+		Text:      item.Text,
+		SortOrder: item.SortOrder,
+		Enabled:   item.Enabled,
+		UpdatedAt: item.UpdatedAt,
+	}, nil
+}
+
+func (s *AdminService) UpdateHomeHighlight(id uint, input dto.HomeHighlightRequest) (*dto.HomeHighlightItem, error) {
+	item, err := s.portal.GetHomeHighlight(id)
+	if err != nil {
+		return nil, err
+	}
+	item.Text = input.Text
+	item.SortOrder = input.SortOrder
+	item.Enabled = input.Enabled
+	if err := s.portal.UpdateHomeHighlight(item); err != nil {
+		return nil, err
+	}
+	return &dto.HomeHighlightItem{
+		ID:        item.ID,
+		Text:      item.Text,
+		SortOrder: item.SortOrder,
+		Enabled:   item.Enabled,
+		UpdatedAt: item.UpdatedAt,
+	}, nil
+}
+
+func (s *AdminService) DeleteHomeHighlight(id uint) error {
+	return s.portal.DeleteHomeHighlight(id)
+}
+
+func (s *AdminService) ScenePages() ([]dto.ScenePageItem, error) {
+	items, err := s.portal.ListScenePages(false)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.ScenePageItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, toScenePageItem(item))
+	}
+	return result, nil
+}
+
+func (s *AdminService) CreateScenePage(input dto.ScenePageRequest) (*dto.ScenePageItem, error) {
+	item := &model.ScenePageConfig{
+		Slug:        input.Slug,
+		Name:        input.Name,
+		Tagline:     input.Tagline,
+		Summary:     input.Summary,
+		Description: input.Description,
+		SortOrder:   input.SortOrder,
+		Enabled:     input.Enabled,
+	}
+	if err := s.portal.CreateScenePage(item); err != nil {
+		return nil, err
+	}
+	result := toScenePageItem(*item)
+	return &result, nil
+}
+
+func (s *AdminService) UpdateScenePage(id uint, input dto.ScenePageRequest) (*dto.ScenePageItem, error) {
+	item, err := s.portal.GetScenePage(id)
+	if err != nil {
+		return nil, err
+	}
+	item.Slug = input.Slug
+	item.Name = input.Name
+	item.Tagline = input.Tagline
+	item.Summary = input.Summary
+	item.Description = input.Description
+	item.SortOrder = input.SortOrder
+	item.Enabled = input.Enabled
+	if err := s.portal.UpdateScenePage(item); err != nil {
+		return nil, err
+	}
+	result := toScenePageItem(*item)
+	return &result, nil
+}
+
+func (s *AdminService) DeleteScenePage(id uint) error {
+	return s.portal.DeleteScenePage(id)
+}
+
+func (s *AdminService) FilterOptionConfigs(kind string) ([]dto.FilterOptionConfigItem, error) {
+	items, err := s.content.ListFilterOptionConfigs(kind, false)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.FilterOptionConfigItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, dto.FilterOptionConfigItem{
+			ID:        item.ID,
+			Kind:      item.Kind,
+			Value:     item.Value,
+			SortOrder: item.SortOrder,
+			Enabled:   item.Enabled,
+			UpdatedAt: item.UpdatedAt,
+		})
+	}
+	return result, nil
+}
+
+func (s *AdminService) CreateFilterOptionConfig(adminUserID uint, input dto.FilterOptionConfigRequest) (*dto.FilterOptionConfigItem, error) {
+	item := &model.FilterOptionConfig{
+		Kind:      input.Kind,
+		Value:     input.Value,
+		SortOrder: input.SortOrder,
+		Enabled:   input.Enabled,
+	}
+	if err := s.content.CreateFilterOptionConfig(item); err != nil {
+		return nil, err
+	}
+	if err := s.logOperation(adminUserID, "create", "filter-option", item.ID, item.Value, item.Kind); err != nil {
+		return nil, err
+	}
+	return &dto.FilterOptionConfigItem{
+		ID:        item.ID,
+		Kind:      item.Kind,
+		Value:     item.Value,
+		SortOrder: item.SortOrder,
+		Enabled:   item.Enabled,
+		UpdatedAt: item.UpdatedAt,
+	}, nil
+}
+
+func (s *AdminService) UpdateFilterOptionConfig(id, adminUserID uint, input dto.FilterOptionConfigRequest) (*dto.FilterOptionConfigItem, error) {
+	item, err := s.content.GetFilterOptionConfig(id)
+	if err != nil {
+		return nil, err
+	}
+	item.Kind = input.Kind
+	item.Value = input.Value
+	item.SortOrder = input.SortOrder
+	item.Enabled = input.Enabled
+	if err := s.content.UpdateFilterOptionConfig(item); err != nil {
+		return nil, err
+	}
+	if err := s.logOperation(adminUserID, "update", "filter-option", item.ID, item.Value, item.Kind); err != nil {
+		return nil, err
+	}
+	return &dto.FilterOptionConfigItem{
+		ID:        item.ID,
+		Kind:      item.Kind,
+		Value:     item.Value,
+		SortOrder: item.SortOrder,
+		Enabled:   item.Enabled,
+		UpdatedAt: item.UpdatedAt,
+	}, nil
+}
+
+func (s *AdminService) DeleteFilterOptionConfig(id, adminUserID uint) error {
+	item, err := s.content.GetFilterOptionConfig(id)
+	if err != nil {
+		return err
+	}
+	if err := s.content.DeleteFilterOptionConfig(id); err != nil {
+		return err
+	}
+	return s.logOperation(adminUserID, "delete", "filter-option", item.ID, item.Value, item.Kind)
+}
+
+func (s *AdminService) RankingConfig() (*dto.RankingConfigItem, error) {
+	item, err := s.portal.GetRankingConfig()
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || item == nil {
+			return defaultRankingConfig(), nil
+		}
+		return nil, err
+	}
+	return &dto.RankingConfigItem{
+		ID:        item.ID,
+		Title:     item.Title,
+		Subtitle:  item.Subtitle,
+		Limit:     item.Limit,
+		Enabled:   item.Enabled,
+		UpdatedAt: item.UpdatedAt,
+	}, nil
+}
+
+func (s *AdminService) UpdateRankingConfig(input dto.RankingConfigRequest) (*dto.RankingConfigItem, error) {
+	item := &model.RankingConfig{
+		Title:    input.Title,
+		Subtitle: input.Subtitle,
+		Limit:    input.Limit,
+		Enabled:  input.Enabled,
+	}
+	if err := s.portal.UpsertRankingConfig(item); err != nil {
+		return nil, err
+	}
+	updated, err := s.portal.GetRankingConfig()
+	if err != nil {
+		return nil, err
+	}
+	return &dto.RankingConfigItem{
+		ID:        updated.ID,
+		Title:     updated.Title,
+		Subtitle:  updated.Subtitle,
+		Limit:     updated.Limit,
+		Enabled:   updated.Enabled,
+		UpdatedAt: updated.UpdatedAt,
+	}, nil
 }
 
 func (s *AdminService) FeaturedResources() ([]dto.FeaturedResourceItem, error) {
@@ -256,6 +546,7 @@ func (s *AdminService) FeaturedResources() ([]dto.FeaturedResourceItem, error) {
 			Title:        title,
 			Summary:      summary,
 			Route:        route,
+			BadgeLabel:   item.BadgeLabel,
 			SortOrder:    item.SortOrder,
 			Enabled:      item.Enabled,
 			UpdatedAt:    item.UpdatedAt,
@@ -268,6 +559,7 @@ func (s *AdminService) CreateFeaturedResource(input dto.FeaturedResourceRequest)
 	item := &model.FeaturedResource{
 		ResourceType: input.ResourceType,
 		ResourceID:   input.ResourceID,
+		BadgeLabel:   input.BadgeLabel,
 		SortOrder:    input.SortOrder,
 		Enabled:      input.Enabled,
 	}
@@ -282,6 +574,7 @@ func (s *AdminService) CreateFeaturedResource(input dto.FeaturedResourceRequest)
 		Title:        title,
 		Summary:      summary,
 		Route:        route,
+		BadgeLabel:   item.BadgeLabel,
 		SortOrder:    item.SortOrder,
 		Enabled:      item.Enabled,
 		UpdatedAt:    item.UpdatedAt,
@@ -295,6 +588,7 @@ func (s *AdminService) UpdateFeaturedResource(id uint, input dto.FeaturedResourc
 	}
 	item.ResourceType = input.ResourceType
 	item.ResourceID = input.ResourceID
+	item.BadgeLabel = input.BadgeLabel
 	item.SortOrder = input.SortOrder
 	item.Enabled = input.Enabled
 	if err := s.portal.UpdateFeaturedResource(item); err != nil {
@@ -308,6 +602,7 @@ func (s *AdminService) UpdateFeaturedResource(id uint, input dto.FeaturedResourc
 		Title:        title,
 		Summary:      summary,
 		Route:        route,
+		BadgeLabel:   item.BadgeLabel,
 		SortOrder:    item.SortOrder,
 		Enabled:      item.Enabled,
 		UpdatedAt:    item.UpdatedAt,

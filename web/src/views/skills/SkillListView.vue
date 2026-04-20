@@ -11,17 +11,17 @@
         </RouterLink>
       </div>
 
-      <a-list :grid="{ gutter: 16, column: 3 }" :data-source="items">
+      <a-list :grid="listGrid" :data-source="items">
         <template #renderItem="{ item }">
           <a-list-item>
-            <a-card :title="item.name">
-              <p>{{ item.summary }}</p>
+            <a-card :title="item.name" class="skill-card">
+              <p class="skill-summary">{{ item.summary }}</p>
               <a-space wrap style="margin-bottom: 10px">
                 <span class="pill-meta">{{ item.category }}</span>
                 <span class="pill-meta">{{ item.scene }}</span>
                 <span class="pill-meta">评分 {{ item.rating.average.toFixed(1) }}</span>
               </a-space>
-              <div class="section-subtitle">作者：{{ item.owner_name }}</div>
+              <div class="section-subtitle skill-owner">作者：{{ item.owner_name }}</div>
               <template #actions>
                 <RouterLink :to="`/skills/${item.id}`">查看详情</RouterLink>
               </template>
@@ -41,6 +41,14 @@ import { api } from '@/api';
 import type { SkillItem } from '@/types/api';
 
 const items = ref<SkillItem[]>([]);
+const listGrid = {
+  gutter: 16,
+  xs: 1,
+  sm: 1,
+  md: 2,
+  lg: 3,
+  xl: 3,
+};
 
 onMounted(async () => {
   items.value = await api.listSkills();
@@ -50,5 +58,25 @@ onMounted(async () => {
 <style scoped>
 .block {
   padding: 24px;
+}
+
+.skill-card {
+  height: 100%;
+  border-radius: 18px;
+}
+
+.skill-card :deep(.ant-card-body) {
+  min-height: 178px;
+}
+
+.skill-summary {
+  min-height: 44px;
+  margin-bottom: 12px;
+  color: var(--text-main);
+  overflow-wrap: anywhere;
+}
+
+.skill-owner {
+  overflow-wrap: anywhere;
 }
 </style>

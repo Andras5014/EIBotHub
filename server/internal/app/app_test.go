@@ -179,7 +179,7 @@ func TestPortalHeroConfigFlow(t *testing.T) {
 
 	getResp := performRequest(t, app, http.MethodGet, "/api/v1/admin/portal/hero-config", nil, adminToken, "")
 	require.Equal(t, http.StatusOK, getResp.Code)
-	require.Contains(t, getResp.Body.String(), "OpenLoong 风格信息门户")
+	require.Contains(t, getResp.Body.String(), "EIBotHub具生训练")
 
 	updateResp := performJSON(t, app, http.MethodPut, "/api/v1/admin/portal/hero-config", map[string]any{
 		"tagline":          "机器人开发导读区",

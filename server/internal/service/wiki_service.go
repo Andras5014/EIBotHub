@@ -259,7 +259,7 @@ func (s *WikiService) ensureEditable(item model.WikiPage, userID uint) error {
 	if err != nil {
 		return err
 	}
-	if user.Role == model.RoleAdmin {
+	if model.IsAdminRole(user.Role) {
 		return nil
 	}
 	return support.NewError(http.StatusLocked, "wiki_locked", "该 Wiki 词条已被锁定，仅管理员可编辑")

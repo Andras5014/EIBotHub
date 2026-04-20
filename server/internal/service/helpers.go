@@ -2,6 +2,7 @@ package service
 
 import (
 	"path"
+	"time"
 
 	"github.com/Andras5014/EIBotHub/server/internal/dto"
 	"github.com/Andras5014/EIBotHub/server/internal/model"
@@ -32,6 +33,20 @@ func buildStorageURL(filePath string) string {
 	return "/" + path.Clean("storage/"+filePath)
 }
 
+func buildAuthorizedFileURL(files *FileService, filePath, fileName string, uploadedBy uint, inline bool) string {
+	if filePath == "" {
+		return ""
+	}
+	if files == nil {
+		return buildStorageURL(filePath)
+	}
+	ttl := 30 * time.Minute
+	if inline {
+		ttl = 2 * time.Hour
+	}
+	return files.AuthorizedURL(filePath, fileName, uploadedBy, inline, ttl)
+}
+
 func toModelCard(item model.ModelAsset) dto.ResourceCard {
 	return dto.ResourceCard{
 		ID:          item.ID,
@@ -41,6 +56,7 @@ func toModelCard(item model.ModelAsset) dto.ResourceCard {
 		Type:        "model",
 		Tags:        support.SplitCSV(item.Tags),
 		RobotType:   item.RobotType,
+		BadgeLabel:  item.RecommendTag,
 		Downloads:   item.Downloads,
 		Status:      item.Status,
 		Owner:       item.Owner.Username,
@@ -56,6 +72,7 @@ func toDatasetCard(item model.Dataset) dto.ResourceCard {
 		Description: item.Description,
 		Type:        "dataset",
 		Tags:        support.SplitCSV(item.Tags),
+		BadgeLabel:  "",
 		Downloads:   item.Downloads,
 		Status:      item.Status,
 		Owner:       item.Owner.Username,
@@ -63,12 +80,12 @@ func toDatasetCard(item model.Dataset) dto.ResourceCard {
 	}
 }
 
-func toModelVersion(version model.ModelVersion) dto.FileVersion {
+func toModelVersion(version model.ModelVersion, files *FileService, uploadedBy uint) dto.FileVersion {
 	return dto.FileVersion{
 		ID:        version.ID,
 		Version:   version.Version,
 		FileName:  version.FileName,
-		FileURL:   buildStorageURL(version.FilePath),
+		FileURL:   buildAuthorizedFileURL(files, version.FilePath, version.FileName, uploadedBy, false),
 		Changelog: version.Changelog,
 		CreatedAt: version.CreatedAt,
 	}

@@ -2,18 +2,22 @@ package service
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/Andras5014/EIBotHub/server/internal/dto"
+	"github.com/Andras5014/EIBotHub/server/internal/model"
 	"github.com/Andras5014/EIBotHub/server/internal/repository"
 	"github.com/Andras5014/EIBotHub/server/internal/support"
 )
 
 type CatalogService struct {
-	content *repository.ContentRepository
+	models   *repository.ModelRepository
+	datasets *repository.DatasetRepository
+	content  *repository.ContentRepository
 }
 
-func NewCatalogService(content *repository.ContentRepository) *CatalogService {
-	return &CatalogService{content: content}
+func NewCatalogService(models *repository.ModelRepository, datasets *repository.DatasetRepository, content *repository.ContentRepository) *CatalogService {
+	return &CatalogService{models: models, datasets: datasets, content: content}
 }
 
 func (s *CatalogService) Templates() ([]dto.TaskTemplateItem, error) {
@@ -144,4 +148,119 @@ func (s *CatalogService) DatasetOptions() (*dto.DatasetOptionsResponse, error) {
 		result.PrivacyOptions = append(result.PrivacyOptions, toDatasetPrivacyOptionItem(item))
 	}
 	return result, nil
+}
+
+func (s *CatalogService) FilterOptions() (*dto.FilterOptionsResponse, error) {
+	models, err := s.models.ListAllPublished()
+	if err != nil {
+		return nil, err
+	}
+	datasets, err := s.datasets.ListAllPublished()
+	if err != nil {
+		return nil, err
+	}
+	templates, err := s.content.ListTemplates()
+	if err != nil {
+		return nil, err
+	}
+	cases, err := s.content.ListApplicationCases()
+	if err != nil {
+		return nil, err
+	}
+	configs, err := s.content.ListFilterOptionConfigs("", true)
+	if err != nil {
+		return nil, err
+	}
+
+	modelTags := make([]string, 0)
+	datasetTags := make([]string, 0)
+	robotTypes := make([]string, 0)
+	datasetScenes := make([]string, 0)
+	templateCategories := make([]string, 0)
+	templateScenes := make([]string, 0)
+	caseCategories := make([]string, 0)
+
+	for _, item := range models {
+		modelTags = append(modelTags, support.SplitCSV(item.Tags)...)
+		robotTypes = appendValue(robotTypes, item.RobotType)
+	}
+	for _, item := range datasets {
+		datasetTags = append(datasetTags, support.SplitCSV(item.Tags)...)
+		datasetScenes = appendValue(datasetScenes, item.Scene)
+	}
+	for _, item := range templates {
+		templateCategories = appendValue(templateCategories, item.Category)
+		templateScenes = appendValue(templateScenes, item.Scene)
+	}
+	for _, item := range cases {
+		caseCategories = appendValue(caseCategories, item.Category)
+	}
+
+	configMap := groupFilterConfigs(configs)
+	allTags := append(append([]string{}, modelTags...), datasetTags...)
+	return &dto.FilterOptionsResponse{
+		Tags:                      mergeConfiguredOptions(configMap["tag"], allTags),
+		ModelTags:                 mergeConfiguredOptions(configMap["model_tag"], modelTags),
+		DatasetTags:               mergeConfiguredOptions(configMap["dataset_tag"], datasetTags),
+		RobotTypes:                mergeConfiguredOptions(configMap["robot_type"], robotTypes),
+		DatasetScenes:             mergeConfiguredOptions(configMap["dataset_scene"], datasetScenes),
+		TemplateCategories:        mergeConfiguredOptions(configMap["template_category"], templateCategories),
+		TemplateScenes:            mergeConfiguredOptions(configMap["template_scene"], templateScenes),
+		ApplicationCaseCategories: mergeConfiguredOptions(configMap["application_case_category"], caseCategories),
+	}, nil
+}
+
+func appendValue(values []string, value string) []string {
+	if value == "" {
+		return values
+	}
+	return append(values, value)
+}
+
+func uniqueSorted(values []string) []string {
+	set := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, exists := set[value]; exists {
+			continue
+		}
+		set[value] = struct{}{}
+		result = append(result, value)
+	}
+	slices.Sort(result)
+	return result
+}
+
+func groupFilterConfigs(items []model.FilterOptionConfig) map[string][]string {
+	result := make(map[string][]string)
+	for _, item := range items {
+		result[item.Kind] = append(result[item.Kind], item.Value)
+	}
+	return result
+}
+
+func mergeConfiguredOptions(configured []string, discovered []string) []string {
+	result := make([]string, 0, len(configured)+len(discovered))
+	seen := make(map[string]struct{})
+	for _, value := range configured {
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	for _, value := range uniqueSorted(discovered) {
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }

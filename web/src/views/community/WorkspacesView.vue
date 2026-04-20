@@ -20,8 +20,23 @@
           <a-card title="空间列表" class="inner-card" style="margin-top: 16px">
             <a-list :data-source="spaces">
               <template #renderItem="{ item }">
-                <a-list-item :class="{ active: selected?.id === item.id }" @click="selectWorkspace(item.id)" style="cursor: pointer">
-                  <a-list-item-meta :title="item.name" :description="`${item.summary} · 成员 ${item.member_count}`" />
+                <a-list-item
+                  :class="{ active: selectedMeta?.id === item.id }"
+                  @click="selectWorkspace(item)"
+                  style="cursor: pointer"
+                >
+                  <a-list-item-meta>
+                    <template #title>
+                      <a-space wrap>
+                        <span>{{ item.name }}</span>
+                        <a-tag :color="item.active ? 'green' : 'red'">{{ item.active ? '正常' : '已封禁' }}</a-tag>
+                      </a-space>
+                    </template>
+                    <template #description>
+                      <div>{{ item.summary }} · 成员 {{ item.member_count }}</div>
+                      <div v-if="item.blocked_reason" class="blocked-text">封禁原因：{{ item.blocked_reason }}</div>
+                    </template>
+                  </a-list-item-meta>
                 </a-list-item>
               </template>
             </a-list>
@@ -30,7 +45,14 @@
 
         <a-col :xs="24" :lg="16">
           <a-card title="空间详情" class="inner-card">
-            <template v-if="selected">
+            <template v-if="selectedMeta && !selectedMeta.active">
+              <a-result
+                status="warning"
+                title="当前协作空间已被封禁"
+                :sub-title="selectedMeta.blocked_reason || '管理员已限制该空间访问，成员暂不可查看详情或发送消息。'"
+              />
+            </template>
+            <template v-else-if="selected">
               <h2>{{ selected.name }}</h2>
               <p class="section-subtitle">{{ selected.summary }}</p>
               <a-space wrap style="margin-bottom: 12px">
@@ -92,6 +114,7 @@ import type { WorkspaceDetail, WorkspaceItem } from '@/types/api';
 const route = useRoute();
 const router = useRouter();
 const spaces = ref<WorkspaceItem[]>([]);
+const selectedMeta = ref<WorkspaceItem>();
 const selected = ref<WorkspaceDetail>();
 const createForm = reactive({
   name: '',
@@ -108,9 +131,14 @@ async function loadSpaces() {
   spaces.value = await api.listWorkspaces();
 }
 
-async function selectWorkspace(id: number) {
-  selected.value = await api.getWorkspace(id);
-  router.replace({ query: { ...route.query, id: String(id) } });
+async function selectWorkspace(item: WorkspaceItem) {
+  selectedMeta.value = item;
+  router.replace({ query: { ...route.query, id: String(item.id) } });
+  if (!item.active) {
+    selected.value = undefined;
+    return;
+  }
+  selected.value = await api.getWorkspace(item.id);
 }
 
 async function createWorkspace() {
@@ -119,6 +147,7 @@ async function createWorkspace() {
     createForm.name = '';
     createForm.summary = '';
     await loadSpaces();
+    selectedMeta.value = spaces.value.find((item) => item.id === workspace.id) ?? workspace;
     selected.value = workspace;
     message.success('协作空间已创建');
   } catch (error) {
@@ -127,7 +156,7 @@ async function createWorkspace() {
 }
 
 async function addMember() {
-  if (!selected.value) return;
+  if (!selected.value || !selectedMeta.value?.active) return;
   if (!memberForm.user_id) {
     message.error('请选择要添加的成员');
     return;
@@ -143,7 +172,7 @@ async function addMember() {
 }
 
 async function sendWorkspaceMessage() {
-  if (!selected.value) return;
+  if (!selected.value || !selectedMeta.value?.active) return;
   try {
     await api.sendWorkspaceMessage(selected.value.id, messageForm);
     messageForm.content = '';
@@ -172,7 +201,10 @@ watch(
   () => route.query.id,
   async (id) => {
     if (id) {
-      await selectWorkspace(Number(id));
+      const target = spaces.value.find((item) => item.id === Number(id));
+      if (target) {
+        await selectWorkspace(target);
+      }
     }
   },
 );
@@ -181,11 +213,15 @@ onMounted(async () => {
   await loadSpaces();
   const workspaceID = route.query.id;
   if (workspaceID) {
-    await selectWorkspace(Number(workspaceID));
+    const target = spaces.value.find((item) => item.id === Number(workspaceID));
+    if (target) {
+      await selectWorkspace(target);
+      return;
+    }
     return;
   }
   if (spaces.value.length > 0) {
-    await selectWorkspace(spaces.value[0].id);
+    await selectWorkspace(spaces.value[0]);
   }
 });
 
@@ -206,5 +242,10 @@ function formatDate(value: string) {
 .active {
   background: var(--surface-soft);
   border-radius: 14px;
+}
+
+.blocked-text {
+  margin-top: 4px;
+  color: #cf1322;
 }
 </style>

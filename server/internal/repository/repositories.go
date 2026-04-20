@@ -46,6 +46,21 @@ func (r *UserRepository) Count() (int64, error) {
 	return count, r.db.Model(&model.User{}).Count(&count).Error
 }
 
+func (r *UserRepository) ListByRole(role string) ([]model.User, error) {
+	var users []model.User
+	err := r.db.Where("role = ?", role).Order("id asc").Find(&users).Error
+	return users, err
+}
+
+func (r *UserRepository) ListByRoles(roles ...string) ([]model.User, error) {
+	if len(roles) == 0 {
+		return []model.User{}, nil
+	}
+	var users []model.User
+	err := r.db.Where("role IN ?", roles).Order("id asc").Find(&users).Error
+	return users, err
+}
+
 func (r *UserRepository) SearchByKeyword(query string) ([]model.User, error) {
 	var users []model.User
 	like := "%" + strings.TrimSpace(query) + "%"
@@ -80,7 +95,7 @@ func (r *PortalRepository) CountAnnouncements() (int64, error) {
 
 func (r *PortalRepository) ListModuleSettings() ([]model.HomeModuleSetting, error) {
 	var items []model.HomeModuleSetting
-	err := r.db.Order("module_key asc").Find(&items).Error
+	err := r.db.Order("sort_order asc, module_key asc").Find(&items).Error
 	return items, err
 }
 
@@ -88,6 +103,7 @@ func (r *PortalRepository) UpsertModuleSetting(item *model.HomeModuleSetting) er
 	var existing model.HomeModuleSetting
 	err := r.db.Where("module_key = ?", item.ModuleKey).First(&existing).Error
 	if err == nil {
+		existing.SortOrder = item.SortOrder
 		existing.Enabled = item.Enabled
 		return r.db.Save(&existing).Error
 	}
@@ -95,6 +111,114 @@ func (r *PortalRepository) UpsertModuleSetting(item *model.HomeModuleSetting) er
 		return err
 	}
 	return r.db.Create(item).Error
+}
+
+func (r *PortalRepository) ListHomeHighlights(enabledOnly bool) ([]model.HomeHighlight, error) {
+	var items []model.HomeHighlight
+	db := r.db.Model(&model.HomeHighlight{})
+	if enabledOnly {
+		db = db.Where("enabled = ?", true)
+	}
+	err := db.Order("sort_order asc, updated_at desc").Find(&items).Error
+	return items, err
+}
+
+func (r *PortalRepository) CreateHomeHighlight(item *model.HomeHighlight) error {
+	return r.db.Create(item).Error
+}
+
+func (r *PortalRepository) GetHomeHighlight(id uint) (*model.HomeHighlight, error) {
+	var item model.HomeHighlight
+	err := r.db.First(&item, id).Error
+	return &item, err
+}
+
+func (r *PortalRepository) UpdateHomeHighlight(item *model.HomeHighlight) error {
+	return r.db.Save(item).Error
+}
+
+func (r *PortalRepository) DeleteHomeHighlight(id uint) error {
+	return r.db.Delete(&model.HomeHighlight{}, id).Error
+}
+
+func (r *PortalRepository) GetHomeHeroConfig() (*model.HomeHeroConfig, error) {
+	var item model.HomeHeroConfig
+	err := r.db.Order("id asc").First(&item).Error
+	return &item, err
+}
+
+func (r *PortalRepository) UpsertHomeHeroConfig(item *model.HomeHeroConfig) error {
+	var existing model.HomeHeroConfig
+	err := r.db.Order("id asc").First(&existing).Error
+	if err == nil {
+		existing.Tagline = item.Tagline
+		existing.Title = item.Title
+		existing.Description = item.Description
+		existing.PrimaryButton = item.PrimaryButton
+		existing.SecondaryButton = item.SecondaryButton
+		existing.SearchButton = item.SearchButton
+		return r.db.Save(&existing).Error
+	}
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+	return r.db.Create(item).Error
+}
+
+func (r *PortalRepository) GetRankingConfig() (*model.RankingConfig, error) {
+	var item model.RankingConfig
+	err := r.db.Order("id asc").First(&item).Error
+	return &item, err
+}
+
+func (r *PortalRepository) UpsertRankingConfig(item *model.RankingConfig) error {
+	var existing model.RankingConfig
+	err := r.db.Order("id asc").First(&existing).Error
+	if err == nil {
+		existing.Title = item.Title
+		existing.Subtitle = item.Subtitle
+		existing.Limit = item.Limit
+		existing.Enabled = item.Enabled
+		return r.db.Save(&existing).Error
+	}
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+	return r.db.Create(item).Error
+}
+
+func (r *PortalRepository) ListScenePages(enabledOnly bool) ([]model.ScenePageConfig, error) {
+	var items []model.ScenePageConfig
+	db := r.db.Model(&model.ScenePageConfig{})
+	if enabledOnly {
+		db = db.Where("enabled = ?", true)
+	}
+	err := db.Order("sort_order asc, updated_at desc").Find(&items).Error
+	return items, err
+}
+
+func (r *PortalRepository) CreateScenePage(item *model.ScenePageConfig) error {
+	return r.db.Create(item).Error
+}
+
+func (r *PortalRepository) GetScenePage(id uint) (*model.ScenePageConfig, error) {
+	var item model.ScenePageConfig
+	err := r.db.First(&item, id).Error
+	return &item, err
+}
+
+func (r *PortalRepository) GetScenePageBySlug(slug string) (*model.ScenePageConfig, error) {
+	var item model.ScenePageConfig
+	err := r.db.Where("slug = ?", slug).First(&item).Error
+	return &item, err
+}
+
+func (r *PortalRepository) UpdateScenePage(item *model.ScenePageConfig) error {
+	return r.db.Save(item).Error
+}
+
+func (r *PortalRepository) DeleteScenePage(id uint) error {
+	return r.db.Delete(&model.ScenePageConfig{}, id).Error
 }
 
 func (r *PortalRepository) ListFeaturedResources() ([]model.FeaturedResource, error) {
@@ -181,6 +305,18 @@ func (r *ModelRepository) Top(limit int) ([]model.ModelAsset, error) {
 	return items, err
 }
 
+func (r *ModelRepository) ListAllPublished() ([]model.ModelAsset, error) {
+	var items []model.ModelAsset
+	err := r.db.Where("status = ?", model.StatusPublished).Preload("Owner").Order("updated_at desc").Find(&items).Error
+	return items, err
+}
+
+func (r *ModelRepository) ListAll() ([]model.ModelAsset, error) {
+	var items []model.ModelAsset
+	err := r.db.Preload("Owner").Order("updated_at desc").Find(&items).Error
+	return items, err
+}
+
 func (r *ModelRepository) ListPublishedByIDs(ids []uint) ([]model.ModelAsset, error) {
 	if len(ids) == 0 {
 		return []model.ModelAsset{}, nil
@@ -210,6 +346,10 @@ func (r *ModelRepository) ListPending() ([]model.ModelAsset, error) {
 	return items, err
 }
 
+func (r *ModelRepository) UpdateRecommendTag(id uint, recommendTag string) error {
+	return r.db.Model(&model.ModelAsset{}).Where("id = ?", id).Update("recommend_tag", recommendTag).Error
+}
+
 type DatasetRepository struct {
 	db *gorm.DB
 }
@@ -235,10 +375,13 @@ func (r *DatasetRepository) GetByID(id uint) (*model.Dataset, error) {
 	return &item, err
 }
 
-func (r *DatasetRepository) ListPublished(query, tags, sort string, page, pageSize int) ([]model.Dataset, int64, error) {
+func (r *DatasetRepository) ListPublished(query, tags, scene, sort string, page, pageSize int) ([]model.Dataset, int64, error) {
 	db := r.db.Model(&model.Dataset{}).Where("status = ?", model.StatusPublished)
 	db = applyTextSearch(db, query, []string{"name", "summary", "description", "scene"})
 	db = applyTagFilter(db, tags)
+	if scene != "" {
+		db = db.Where("scene = ?", scene)
+	}
 
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
@@ -259,12 +402,18 @@ func (r *DatasetRepository) ListByOwner(ownerID uint) ([]model.Dataset, error) {
 }
 
 func (r *DatasetRepository) Search(query, tags string, page, pageSize int) ([]model.Dataset, int64, error) {
-	return r.ListPublished(query, tags, "downloads", page, pageSize)
+	return r.ListPublished(query, tags, "", "downloads", page, pageSize)
 }
 
 func (r *DatasetRepository) Top(limit int) ([]model.Dataset, error) {
 	var items []model.Dataset
 	err := r.db.Where("status = ?", model.StatusPublished).Order("downloads desc, updated_at desc").Limit(limit).Preload("Owner").Find(&items).Error
+	return items, err
+}
+
+func (r *DatasetRepository) ListAllPublished() ([]model.Dataset, error) {
+	var items []model.Dataset
+	err := r.db.Where("status = ?", model.StatusPublished).Preload("Owner").Order("updated_at desc").Find(&items).Error
 	return items, err
 }
 
@@ -277,8 +426,32 @@ func (r *DatasetRepository) ListPublishedByIDs(ids []uint) ([]model.Dataset, err
 	return items, err
 }
 
+func (r *DatasetRepository) ListByIDs(ids []uint) ([]model.Dataset, error) {
+	if len(ids) == 0 {
+		return []model.Dataset{}, nil
+	}
+	var items []model.Dataset
+	err := r.db.Where("id IN ?", ids).Preload("Owner").Find(&items).Error
+	return items, err
+}
+
 func (r *DatasetRepository) CreateVersion(version *model.DatasetVersion) error {
 	return r.db.Create(version).Error
+}
+
+func (r *DatasetRepository) ReplaceTextSamples(datasetID uint, samples []model.DatasetSample) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("dataset_id = ? AND sample_type = ?", datasetID, "text").Delete(&model.DatasetSample{}).Error; err != nil {
+			return err
+		}
+		if len(samples) == 0 {
+			return nil
+		}
+		for index := range samples {
+			samples[index].DatasetID = datasetID
+		}
+		return tx.Create(&samples).Error
+	})
 }
 
 func (r *DatasetRepository) IncrementDownloads(id uint) error {
@@ -327,9 +500,41 @@ func (r *DatasetRepository) UpdateAccessRequest(item *model.DatasetAccessRequest
 	return r.db.Save(item).Error
 }
 
+func (r *DatasetRepository) FindAccessRequestsByIDs(ids []uint) ([]model.DatasetAccessRequest, error) {
+	if len(ids) == 0 {
+		return []model.DatasetAccessRequest{}, nil
+	}
+	var items []model.DatasetAccessRequest
+	err := r.db.Where("id IN ?", ids).Find(&items).Error
+	return items, err
+}
+
+func (r *DatasetRepository) UpdateAccessRequests(items []model.DatasetAccessRequest) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for _, item := range items {
+			if err := tx.Save(&item).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (r *DatasetRepository) ListAccessRequests() ([]model.DatasetAccessRequest, error) {
 	var items []model.DatasetAccessRequest
 	err := r.db.Order("created_at desc").Find(&items).Error
+	return items, err
+}
+
+func (r *DatasetRepository) ListAccessRequestsByUser(userID uint) ([]model.DatasetAccessRequest, error) {
+	var items []model.DatasetAccessRequest
+	err := r.db.Where("user_id = ?", userID).Order("created_at desc").Find(&items).Error
+	return items, err
+}
+
+func (r *DatasetRepository) ListAccessRequestsByDatasetAndUser(datasetID, userID uint) ([]model.DatasetAccessRequest, error) {
+	var items []model.DatasetAccessRequest
+	err := r.db.Where("dataset_id = ? AND user_id = ?", datasetID, userID).Order("created_at desc").Find(&items).Error
 	return items, err
 }
 
@@ -444,7 +649,7 @@ func (r *ContentRepository) SearchTemplates(query string, page, pageSize int) ([
 		return nil, 0, err
 	}
 	var items []model.TaskTemplate
-	err := applyPagination(applySort(db, "downloads", "usage_count desc, updated_at desc"), page, pageSize).Find(&items).Error
+	err := applyPagination(db.Order("usage_count desc, updated_at desc"), page, pageSize).Find(&items).Error
 	return items, total, err
 }
 
@@ -652,6 +857,37 @@ func (r *ContentRepository) BatchDeleteVideoTutorials(ids []uint) error {
 	return r.db.Delete(&model.VideoTutorial{}, ids).Error
 }
 
+func (r *ContentRepository) ListFilterOptionConfigs(kind string, enabledOnly bool) ([]model.FilterOptionConfig, error) {
+	var items []model.FilterOptionConfig
+	db := r.db.Model(&model.FilterOptionConfig{})
+	if kind != "" {
+		db = db.Where("kind = ?", kind)
+	}
+	if enabledOnly {
+		db = db.Where("enabled = ?", true)
+	}
+	err := db.Order("sort_order asc, updated_at desc").Find(&items).Error
+	return items, err
+}
+
+func (r *ContentRepository) GetFilterOptionConfig(id uint) (*model.FilterOptionConfig, error) {
+	var item model.FilterOptionConfig
+	err := r.db.First(&item, id).Error
+	return &item, err
+}
+
+func (r *ContentRepository) CreateFilterOptionConfig(item *model.FilterOptionConfig) error {
+	return r.db.Create(item).Error
+}
+
+func (r *ContentRepository) UpdateFilterOptionConfig(item *model.FilterOptionConfig) error {
+	return r.db.Save(item).Error
+}
+
+func (r *ContentRepository) DeleteFilterOptionConfig(id uint) error {
+	return r.db.Delete(&model.FilterOptionConfig{}, id).Error
+}
+
 type UserActivityRepository struct {
 	db *gorm.DB
 }
@@ -724,6 +960,26 @@ func NewReviewRepository(db *gorm.DB) *ReviewRepository {
 
 func (r *ReviewRepository) AddLog(item *model.ReviewLog) error {
 	return r.db.Create(item).Error
+}
+
+func (r *ReviewRepository) ListLatestByResourceIDs(resourceType string, ids []uint) (map[uint]model.ReviewLog, error) {
+	if len(ids) == 0 {
+		return map[uint]model.ReviewLog{}, nil
+	}
+	var items []model.ReviewLog
+	if err := r.db.Where("resource_type = ? AND resource_id IN ?", resourceType, ids).
+		Order("created_at desc, id desc").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	result := make(map[uint]model.ReviewLog, len(items))
+	for _, item := range items {
+		if _, exists := result[item.ResourceID]; exists {
+			continue
+		}
+		result[item.ResourceID] = item
+	}
+	return result, nil
 }
 
 type OperationLogRepository struct {

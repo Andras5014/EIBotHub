@@ -1,8 +1,8 @@
 <template>
   <div class="page-shell" v-if="detail">
     <div class="page-card block">
-      <div class="section-head">
-        <div>
+      <div class="section-head detail-head">
+        <div class="detail-copy">
           <a-space wrap>
             <span class="pill-meta">{{ detail.category }}</span>
             <span class="pill-meta">{{ detail.scene }}</span>
@@ -11,7 +11,7 @@
           <h1 class="section-title" style="margin-top: 10px">{{ detail.name }}</h1>
           <p class="section-subtitle">{{ detail.summary }}</p>
         </div>
-        <a-space>
+        <a-space wrap class="detail-actions">
           <a-button @click="contactAuthor">联系作者</a-button>
           <a-button @click="startWorkspace">进入协作</a-button>
           <a-button type="primary" @click="forkSkill">Fork 技能</a-button>
@@ -20,14 +20,14 @@
 
       <a-row :gutter="[16, 16]">
         <a-col :xs="24" :lg="12">
-          <a-card title="技能说明">
+          <a-card title="技能说明" class="detail-card">
             <p>{{ detail.description }}</p>
             <a-divider />
             <p style="white-space: pre-wrap">{{ detail.guide }}</p>
           </a-card>
         </a-col>
         <a-col :xs="24" :lg="12">
-          <a-card title="评分与互动">
+          <a-card title="评分与互动" class="detail-card">
             <a-statistic :value="ratings?.average ?? 0" :precision="1" title="平均分" />
             <p class="section-subtitle">共 {{ ratings?.count ?? 0 }} 条评分</p>
             <a-divider />
@@ -40,7 +40,7 @@
         </a-col>
       </a-row>
 
-      <a-card title="评论区" style="margin-top: 16px">
+      <a-card title="评论区" class="detail-card" style="margin-top: 16px">
         <a-form :model="commentForm" layout="vertical" @finish="submitComment">
           <a-form-item label="评论内容"><a-textarea v-model:value="commentForm.content" :rows="3" /></a-form-item>
           <a-form-item><a-button type="primary" html-type="submit">发表评论</a-button></a-form-item>
@@ -141,5 +141,25 @@ onMounted(load);
 <style scoped>
 .block {
   padding: 24px;
+}
+
+.detail-copy {
+  min-width: 0;
+  flex: 1 1 420px;
+}
+
+.detail-actions {
+  justify-content: flex-end;
+}
+
+.detail-card {
+  border-radius: 18px;
+}
+
+@media (max-width: 768px) {
+  .detail-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 </style>

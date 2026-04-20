@@ -33,6 +33,12 @@ func (r *CollaborationRepository) FindConversationByKey(key string) (*model.Conv
 	return &item, err
 }
 
+func (r *CollaborationRepository) GetConversation(id uint) (*model.Conversation, error) {
+	var item model.Conversation
+	err := r.db.First(&item, id).Error
+	return &item, err
+}
+
 func (r *CollaborationRepository) CreateConversation(item *model.Conversation) error {
 	return r.db.Create(item).Error
 }
@@ -64,6 +70,12 @@ func (r *CollaborationRepository) ListConversationsByUser(userID uint) ([]model.
 		Where("conversation_participants.user_id = ?", userID).
 		Order("conversations.updated_at desc").
 		Find(&items).Error
+	return items, err
+}
+
+func (r *CollaborationRepository) ListAllConversations() ([]model.Conversation, error) {
+	var items []model.Conversation
+	err := r.db.Order("updated_at desc").Find(&items).Error
 	return items, err
 }
 
@@ -104,6 +116,12 @@ func (r *CollaborationRepository) ListWorkspacesByUser(userID uint) ([]model.Wor
 	return items, err
 }
 
+func (r *CollaborationRepository) ListAllWorkspaces() ([]model.Workspace, error) {
+	var items []model.Workspace
+	err := r.db.Order("updated_at desc").Find(&items).Error
+	return items, err
+}
+
 func (r *CollaborationRepository) GetWorkspace(id uint) (*model.Workspace, error) {
 	var item model.Workspace
 	err := r.db.First(&item, id).Error
@@ -114,10 +132,18 @@ func (r *CollaborationRepository) AddWorkspaceMember(item *model.WorkspaceMember
 	return r.db.Where("workspace_id = ? and user_id = ?", item.WorkspaceID, item.UserID).FirstOrCreate(item).Error
 }
 
+func (r *CollaborationRepository) RemoveWorkspaceMember(workspaceID, userID uint) error {
+	return r.db.Where("workspace_id = ? AND user_id = ?", workspaceID, userID).Delete(&model.WorkspaceMember{}).Error
+}
+
 func (r *CollaborationRepository) ListWorkspaceMembers(workspaceID uint) ([]model.WorkspaceMember, error) {
 	var items []model.WorkspaceMember
 	err := r.db.Where("workspace_id = ?", workspaceID).Order("created_at asc").Find(&items).Error
 	return items, err
+}
+
+func (r *CollaborationRepository) RemoveConversationParticipant(conversationID, userID uint) error {
+	return r.db.Where("conversation_id = ? AND user_id = ?", conversationID, userID).Delete(&model.ConversationParticipant{}).Error
 }
 
 func (r *CollaborationRepository) HasWorkspaceMember(workspaceID, userID uint) (bool, error) {

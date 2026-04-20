@@ -53,6 +53,10 @@ func newApp(cfg config.Config) (*App, error) {
 		&model.User{},
 		&model.Announcement{},
 		&model.HomeModuleSetting{},
+		&model.HomeHighlight{},
+		&model.HomeHeroConfig{},
+		&model.RankingConfig{},
+		&model.ScenePageConfig{},
 		&model.FeaturedResource{},
 		&model.ModelAsset{},
 		&model.ModelVersion{},
@@ -71,6 +75,7 @@ func newApp(cfg config.Config) (*App, error) {
 		&model.DatasetPrivacyOption{},
 		&model.Favorite{},
 		&model.DownloadRecord{},
+		&model.FileObject{},
 		&model.Notification{},
 		&model.AgreementRecord{},
 		&model.ReviewLog{},
@@ -82,6 +87,8 @@ func newApp(cfg config.Config) (*App, error) {
 		&model.Discussion{},
 		&model.Follow{},
 		&model.SearchRecord{},
+		&model.SearchKeywordConfig{},
+		&model.FilterOptionConfig{},
 		&model.DeveloperVerification{},
 		&model.WikiPage{},
 		&model.WikiRevision{},
@@ -112,6 +119,7 @@ func newApp(cfg config.Config) (*App, error) {
 	}
 
 	tokenManager := support.NewTokenManager(cfg.AppSecret)
+	fileTokenManager := support.NewFileTokenManager(cfg.AppSecret)
 
 	userRepo := repository.NewUserRepository(db)
 	portalRepo := repository.NewPortalRepository(db)
@@ -119,6 +127,7 @@ func newApp(cfg config.Config) (*App, error) {
 	datasetRepo := repository.NewDatasetRepository(db)
 	contentRepo := repository.NewContentRepository(db)
 	activityRepo := repository.NewUserActivityRepository(db)
+	fileRepo := repository.NewFileObjectRepository(db)
 	reviewRepo := repository.NewReviewRepository(db)
 	operationRepo := repository.NewOperationLogRepository(db)
 	communityRepo := repository.NewCommunityRepository(db)
@@ -129,11 +138,12 @@ func newApp(cfg config.Config) (*App, error) {
 	collaborationRepo := repository.NewCollaborationRepository(db)
 
 	authService := service.NewAuthService(userRepo, tokenManager)
-	modelService := service.NewModelService(modelRepo, activityRepo)
-	datasetService := service.NewDatasetService(datasetRepo, activityRepo, userRepo, storage)
-	catalogService := service.NewCatalogService(contentRepo)
+	fileService := service.NewFileService(fileRepo, storage, fileTokenManager)
+	modelService := service.NewModelService(modelRepo, activityRepo, reviewRepo, fileService)
+	datasetService := service.NewDatasetService(datasetRepo, activityRepo, userRepo, verificationRepo, reviewRepo, storage, fileService)
+	catalogService := service.NewCatalogService(modelRepo, datasetRepo, contentRepo)
 	portalService := service.NewPortalService(portalRepo, modelRepo, datasetRepo, contentRepo)
-	userService := service.NewUserService(userRepo, activityRepo, modelService, datasetService)
+	userService := service.NewUserService(userRepo, activityRepo, modelService, datasetService, reviewRepo)
 	searchService := service.NewSearchService(modelRepo, datasetRepo, contentRepo, userRepo, communityRepo)
 	adminService := service.NewAdminService(userRepo, portalRepo, modelRepo, datasetRepo, contentRepo, reviewRepo, operationRepo)
 	integrationService := service.NewIntegrationService(integrationRepo)
@@ -141,10 +151,10 @@ func newApp(cfg config.Config) (*App, error) {
 	communityService := service.NewCommunityService(communityRepo, userRepo, modelRepo, datasetRepo, contentRepo, activityRepo, rewardService, integrationService)
 	verificationService := service.NewVerificationService(verificationRepo, userRepo, activityRepo, integrationService)
 	wikiService := service.NewWikiService(wikiRepo, userRepo, integrationService)
-	collaborationService := service.NewCollaborationService(collaborationRepo, userRepo, activityRepo)
+	collaborationService := service.NewCollaborationService(collaborationRepo, userRepo, activityRepo, operationRepo)
 
 	router := gin.New()
-	handler.New(authService, portalService, modelService, datasetService, catalogService, userService, searchService, adminService, communityService, verificationService, wikiService, rewardService, integrationService, collaborationService, storage, tokenManager).Register(router)
+	handler.New(authService, portalService, modelService, datasetService, catalogService, userService, searchService, adminService, communityService, verificationService, wikiService, rewardService, integrationService, collaborationService, fileService, storage, tokenManager).Register(router)
 
 	return &App{
 		cfg:    cfg,
@@ -208,13 +218,69 @@ func seed(db *gorm.DB, storage *support.LocalStorage, secret string) error {
 	}
 
 	moduleSettings := []model.HomeModuleSetting{
-		{ModuleKey: "hero", Enabled: true},
-		{ModuleKey: "models", Enabled: true},
-		{ModuleKey: "announcements", Enabled: true},
-		{ModuleKey: "resources", Enabled: true},
-		{ModuleKey: "community", Enabled: true},
+		{ModuleKey: "hero", SortOrder: 10, Enabled: true},
+		{ModuleKey: "models", SortOrder: 20, Enabled: true},
+		{ModuleKey: "announcements", SortOrder: 30, Enabled: true},
+		{ModuleKey: "scenes", SortOrder: 40, Enabled: true},
+		{ModuleKey: "resources", SortOrder: 50, Enabled: true},
+		{ModuleKey: "community", SortOrder: 60, Enabled: true},
 	}
 	if err := db.Create(&moduleSettings).Error; err != nil {
+		return err
+	}
+
+	scenePages := []model.ScenePageConfig{
+		{
+			Slug:        "patrol-inspection",
+			Name:        "巡逻巡检",
+			Tagline:     "Patrol Inspection",
+			Summary:     "围绕园区巡检、楼宇安防和设备告警联动的资源专题页。",
+			Description: "聚合巡检场景常用模型、数据集、模板和案例，优先满足园区安防、楼宇巡检和弱光告警场景的落地需求。",
+			SortOrder:   10,
+			Enabled:     true,
+		},
+		{
+			Slug:        "warehouse-ops",
+			Name:        "仓储搬运",
+			Tagline:     "Warehouse Operation",
+			Summary:     "围绕仓储搬运、分拣交接和物料调度的场景化入口。",
+			Description: "聚合仓储场景常用抓取、避障、交接模板和案例，帮助开发者更快定位搬运与分拣场景的组合资源。",
+			SortOrder:   20,
+			Enabled:     true,
+		},
+	}
+	if err := db.Create(&scenePages).Error; err != nil {
+		return err
+	}
+
+	highlights := []model.HomeHighlight{
+		{Text: "统一管理模型、数据集和任务模板", SortOrder: 10, Enabled: true},
+		{Text: "面向移动作业、巡逻巡检、搬运等场景", SortOrder: 20, Enabled: true},
+		{Text: "提供文档、下载统计、审核和运营后台", SortOrder: 30, Enabled: true},
+	}
+	if err := db.Create(&highlights).Error; err != nil {
+		return err
+	}
+
+	heroConfig := model.HomeHeroConfig{
+		Tagline:         "EIBotHub具生训练",
+		Title:           "围绕模型、数据集、模板与文档的开放社区",
+		Description:     "开放社区聚合模型、数据集、任务模板、文档与具身应用案例，帮助开发者围绕机器人场景快速完成接入、训练、部署和复用。",
+		PrimaryButton:   "上传模型",
+		SecondaryButton: "上传数据集",
+		SearchButton:    "进入全局搜索",
+	}
+	if err := db.Create(&heroConfig).Error; err != nil {
+		return err
+	}
+
+	rankingConfig := model.RankingConfig{
+		Title:    "贡献排行榜",
+		Subtitle: "基于积分展示近期社区贡献活跃度。",
+		Limit:    5,
+		Enabled:  true,
+	}
+	if err := db.Create(&rankingConfig).Error; err != nil {
 		return err
 	}
 
@@ -302,10 +368,10 @@ func seed(db *gorm.DB, storage *support.LocalStorage, secret string) error {
 	}
 
 	featuredResources := []model.FeaturedResource{
-		{ResourceType: "model", ResourceID: models[0].ID, SortOrder: 1, Enabled: true},
-		{ResourceType: "dataset", ResourceID: datasets[0].ID, SortOrder: 1, Enabled: true},
-		{ResourceType: "task-template", ResourceID: templates[0].ID, SortOrder: 1, Enabled: true},
-		{ResourceType: "application-case", ResourceID: appCases[0].ID, SortOrder: 1, Enabled: true},
+		{ResourceType: "model", ResourceID: models[0].ID, BadgeLabel: "编辑推荐", SortOrder: 1, Enabled: true},
+		{ResourceType: "dataset", ResourceID: datasets[0].ID, BadgeLabel: "精选数据", SortOrder: 1, Enabled: true},
+		{ResourceType: "task-template", ResourceID: templates[0].ID, BadgeLabel: "标准模板", SortOrder: 1, Enabled: true},
+		{ResourceType: "application-case", ResourceID: appCases[0].ID, BadgeLabel: "场景案例", SortOrder: 1, Enabled: true},
 	}
 	if err := db.Create(&featuredResources).Error; err != nil {
 		return err
@@ -482,7 +548,17 @@ func seed(db *gorm.DB, storage *support.LocalStorage, secret string) error {
 		{Query: "搬运", SearchType: "model"},
 		{Query: "部署", SearchType: "doc"},
 	}
-	return db.Create(&searchRecords).Error
+	if err := db.Create(&searchRecords).Error; err != nil {
+		return err
+	}
+
+	searchKeywordConfigs := []model.SearchKeywordConfig{
+		{Query: "巡检", KeywordType: "hot", SortOrder: 1, Enabled: true},
+		{Query: "搬运", KeywordType: "hot", SortOrder: 2, Enabled: true},
+		{Query: "夜间安防", KeywordType: "recommended", SortOrder: 1, Enabled: true},
+		{Query: "仓储搬运", KeywordType: "recommended", SortOrder: 2, Enabled: true},
+	}
+	return db.Create(&searchKeywordConfigs).Error
 }
 
 func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string) error {
@@ -510,6 +586,26 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 		return err
 	}
 	opsUser, err := ensureSeedUser(db, tokenManager, "ops", "ops@example.com", "平台运营与质检")
+	if err != nil {
+		return err
+	}
+	reviewerUser, err := ensureSeedUser(db, tokenManager, "seed-reviewer", "seed-reviewer@example.com", "内容审核与质量把关")
+	if err != nil {
+		return err
+	}
+	maintainerUser, err := ensureSeedUser(db, tokenManager, "seed-maintainer", "seed-maintainer@example.com", "社区维护与模板整理")
+	if err != nil {
+		return err
+	}
+	analystUser, err := ensureSeedUser(db, tokenManager, "seed-analyst", "seed-analyst@example.com", "场景分析与数据标注")
+	if err != nil {
+		return err
+	}
+	creatorUser, err := ensureSeedUser(db, tokenManager, "seed-creator", "seed-creator@example.com", "内容策划与案例撰写")
+	if err != nil {
+		return err
+	}
+	qaUser, err := ensureSeedUser(db, tokenManager, "seed-qa", "seed-qa@example.com", "测试验证与回归检查")
 	if err != nil {
 		return err
 	}
@@ -641,24 +737,116 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 		}
 	}
 
+	var searchKeywordConfigCount int64
+	if err := db.Model(&model.SearchKeywordConfig{}).Count(&searchKeywordConfigCount).Error; err != nil {
+		return err
+	}
+	if searchKeywordConfigCount == 0 {
+		searchKeywordConfigs := []model.SearchKeywordConfig{
+			{Query: "巡检", KeywordType: "hot", SortOrder: 1, Enabled: true},
+			{Query: "搬运", KeywordType: "hot", SortOrder: 2, Enabled: true},
+			{Query: "夜间安防", KeywordType: "recommended", SortOrder: 1, Enabled: true},
+			{Query: "仓储搬运", KeywordType: "recommended", SortOrder: 2, Enabled: true},
+		}
+		if err := db.Create(&searchKeywordConfigs).Error; err != nil {
+			return err
+		}
+	}
+
 	var moduleSettingCount int64
 	if err := db.Model(&model.HomeModuleSetting{}).Count(&moduleSettingCount).Error; err != nil {
 		return err
 	}
 	if moduleSettingCount == 0 {
 		moduleSettings := []model.HomeModuleSetting{
-			{ModuleKey: "hero", Enabled: true},
-			{ModuleKey: "models", Enabled: true},
-			{ModuleKey: "announcements", Enabled: true},
-			{ModuleKey: "resources", Enabled: true},
-			{ModuleKey: "community", Enabled: true},
+			{ModuleKey: "hero", SortOrder: 10, Enabled: true},
+			{ModuleKey: "models", SortOrder: 20, Enabled: true},
+			{ModuleKey: "announcements", SortOrder: 30, Enabled: true},
+			{ModuleKey: "scenes", SortOrder: 40, Enabled: true},
+			{ModuleKey: "resources", SortOrder: 50, Enabled: true},
+			{ModuleKey: "community", SortOrder: 60, Enabled: true},
 		}
 		if err := db.Create(&moduleSettings).Error; err != nil {
 			return err
 		}
 	}
+	var highlightCount int64
+	if err := db.Model(&model.HomeHighlight{}).Count(&highlightCount).Error; err != nil {
+		return err
+	}
+	if highlightCount == 0 {
+		highlights := []model.HomeHighlight{
+			{Text: "统一管理模型、数据集和任务模板", SortOrder: 10, Enabled: true},
+			{Text: "面向移动作业、巡逻巡检、搬运等场景", SortOrder: 20, Enabled: true},
+			{Text: "提供文档、下载统计、审核和运营后台", SortOrder: 30, Enabled: true},
+		}
+		if err := db.Create(&highlights).Error; err != nil {
+			return err
+		}
+	}
+	var heroConfigCount int64
+	if err := db.Model(&model.HomeHeroConfig{}).Count(&heroConfigCount).Error; err != nil {
+		return err
+	}
+	if heroConfigCount == 0 {
+		heroConfig := model.HomeHeroConfig{
+			Tagline:         "OpenLoong 风格信息门户",
+			Title:           "围绕模型、数据集、模板与文档的开放社区",
+			Description:     "开放社区聚合模型、数据集、任务模板、文档与具身应用案例，帮助开发者围绕机器人场景快速完成接入、训练、部署和复用。",
+			PrimaryButton:   "上传模型",
+			SecondaryButton: "上传数据集",
+			SearchButton:    "进入全局搜索",
+		}
+		if err := db.Create(&heroConfig).Error; err != nil {
+			return err
+		}
+	}
+	var rankingConfigCount int64
+	if err := db.Model(&model.RankingConfig{}).Count(&rankingConfigCount).Error; err != nil {
+		return err
+	}
+	if rankingConfigCount == 0 {
+		rankingConfig := model.RankingConfig{
+			Title:    "贡献排行榜",
+			Subtitle: "基于积分展示近期社区贡献活跃度。",
+			Limit:    5,
+			Enabled:  true,
+		}
+		if err := db.Create(&rankingConfig).Error; err != nil {
+			return err
+		}
+	}
+	var scenePageCount int64
+	if err := db.Model(&model.ScenePageConfig{}).Count(&scenePageCount).Error; err != nil {
+		return err
+	}
+	if scenePageCount == 0 {
+		scenePages := []model.ScenePageConfig{
+			{
+				Slug:        "patrol-inspection",
+				Name:        "巡逻巡检",
+				Tagline:     "Patrol Inspection",
+				Summary:     "围绕园区巡检、楼宇安防和设备告警联动的资源专题页。",
+				Description: "聚合巡检场景常用模型、数据集、模板和案例，优先满足园区安防、楼宇巡检和弱光告警场景的落地需求。",
+				SortOrder:   10,
+				Enabled:     true,
+			},
+			{
+				Slug:        "warehouse-ops",
+				Name:        "仓储搬运",
+				Tagline:     "Warehouse Operation",
+				Summary:     "围绕仓储搬运、分拣交接和物料调度的场景化入口。",
+				Description: "聚合仓储场景常用抓取、避障、交接模板和案例，帮助开发者更快定位搬运与分拣场景的组合资源。",
+				SortOrder:   20,
+				Enabled:     true,
+			},
+		}
+		if err := db.Create(&scenePages).Error; err != nil {
+			return err
+		}
+	}
 
-	curatedModels := make([]model.ModelAsset, 0, 2)
+	curatedModels := make([]model.ModelAsset, 0, 4)
 	for _, spec := range []seedModelSpec{
 		{
 			Name:         "Patrol Corridor Vision",
@@ -690,6 +878,36 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 			FileContent:  "seed sorting grasp model",
 			Changelog:    "seed demo release",
 		},
+		{
+			Name:         "Night Security Audio Fusion",
+			Summary:      "面向夜间安防与园区巡逻场景的音视频融合识别模型。",
+			Description:  "用于夜间安防、低照巡逻和异响告警场景中的多传感联动识别。",
+			Tags:         "night-security,audio,patrol",
+			RobotType:    "巡逻巡检",
+			InputSpec:    "RGB + audio stream",
+			OutputSpec:   "alert events",
+			License:      "Apache-2.0",
+			Dependencies: "ffmpeg,onnxruntime",
+			Downloads:    13,
+			FileName:     "seed-night-security.onnx",
+			FileContent:  "seed night security model",
+			Changelog:    "seed demo release",
+		},
+		{
+			Name:         "Factory Quality Defect Locator",
+			Summary:      "适用于产线质检与缺陷复检场景的轻量定位模型。",
+			Description:  "聚焦产线质检中的表面瑕疵、装配偏差和复检框选定位。",
+			Tags:         "factory-quality,defect,vision",
+			RobotType:    "移动作业",
+			InputSpec:    "RGB frame",
+			OutputSpec:   "defect boxes",
+			License:      "MIT",
+			Dependencies: "opencv,tensorrt",
+			Downloads:    12,
+			FileName:     "seed-factory-quality.engine",
+			FileContent:  "seed factory quality model",
+			Changelog:    "seed demo release",
+		},
 	} {
 		item, err := ensureSeedModel(db, storage, demo.ID, spec)
 		if err != nil {
@@ -698,7 +916,7 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 		curatedModels = append(curatedModels, *item)
 	}
 
-	curatedDatasets := make([]model.Dataset, 0, 2)
+	curatedDatasets := make([]model.Dataset, 0, 4)
 	for _, spec := range []seedDatasetSpec{
 		{
 			Name:          "Factory Safety Alert Set",
@@ -722,12 +940,42 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 			Tags:          "forklift,mapping,warehouse",
 			SampleCount:   1430,
 			Device:        "LiDAR + RGBD",
-			Scene:         "移动作业",
+			Scene:         "仓储搬运",
 			Privacy:       "public",
 			AgreementText: "下载并使用本数据集前需同意开放社区使用协议。",
 			Downloads:     17,
 			FileName:      "seed-forklift-mapping.zip",
 			FileContent:   "seed forklift mapping dataset",
+			Changelog:     "seed demo release",
+		},
+		{
+			Name:          "Night Security Audio Event Pack",
+			Summary:       "夜间安防场景中的异响、脚步和门禁异常事件数据集。",
+			Description:   "覆盖夜间安防巡逻中的门禁异常、玻璃破碎、脚步靠近和环境异响等样本。",
+			Tags:          "night-security,audio,alert",
+			SampleCount:   920,
+			Device:        "Microphone + RGB Camera",
+			Scene:         "夜间安防",
+			Privacy:       "public",
+			AgreementText: "下载并使用本数据集前需同意开放社区使用协议。",
+			Downloads:     15,
+			FileName:      "seed-night-security-audio.zip",
+			FileContent:   "seed night security dataset",
+			Changelog:     "seed demo release",
+		},
+		{
+			Name:          "Factory Quality Defect Set",
+			Summary:       "面向产线质检与复检流程的缺陷检测数据集。",
+			Description:   "覆盖划痕、装配偏差、螺丝缺失和表面污染等产线质检样本。",
+			Tags:          "factory-quality,defect,inspection",
+			SampleCount:   1180,
+			Device:        "Industrial Camera",
+			Scene:         "产线质检",
+			Privacy:       "public",
+			AgreementText: "下载并使用本数据集前需同意开放社区使用协议。",
+			Downloads:     14,
+			FileName:      "seed-factory-quality.zip",
+			FileContent:   "seed factory quality dataset",
 			Changelog:     "seed demo release",
 		},
 	} {
@@ -738,7 +986,7 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 		curatedDatasets = append(curatedDatasets, *item)
 	}
 
-	curatedTemplates := make([]model.TaskTemplate, 0, 2)
+	curatedTemplates := make([]model.TaskTemplate, 0, 4)
 	for _, spec := range []seedTemplateSpec{
 		{
 			Name:        "夜间安防巡检模板",
@@ -760,6 +1008,26 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 			ResourceRef: "Sorting Cell Grasp Policy,Forklift Aisle Mapping Pack",
 			UsageCount:  15,
 		},
+		{
+			Name:        "多模态告警联动模板",
+			Summary:     "适用于多模态告警聚合和通知分发的任务模板。",
+			Description: "用于夜间安防与多传感巡逻场景中的音视频告警聚合、分发和闭环记录。",
+			Category:    "多模态告警",
+			Scene:       "多模态告警",
+			Guide:       "1. 绑定音视频输入 2. 配置事件等级 3. 设置通知链路 4. 发布执行",
+			ResourceRef: "Night Security Audio Fusion,Night Security Audio Event Pack",
+			UsageCount:  13,
+		},
+		{
+			Name:        "产线质检复检模板",
+			Summary:     "适用于产线质检与异常复检流程的标准模板。",
+			Description: "覆盖缺陷初检、人工复核、复检回传与关闭工单闭环。",
+			Category:    "产线质检",
+			Scene:       "产线质检",
+			Guide:       "1. 绑定质检模型 2. 配置复检工位 3. 设置回传字段 4. 发布执行",
+			ResourceRef: "Factory Quality Defect Locator,Factory Quality Defect Set",
+			UsageCount:  11,
+		},
 	} {
 		item, err := ensureSeedTemplate(db, spec)
 		if err != nil {
@@ -768,7 +1036,7 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 		curatedTemplates = append(curatedTemplates, *item)
 	}
 
-	curatedCases := make([]model.ApplicationCase, 0, 2)
+	curatedCases := make([]model.ApplicationCase, 0, 4)
 	for _, spec := range []seedApplicationCaseSpec{
 		{
 			Title:    "园区夜间安防巡逻案例",
@@ -781,6 +1049,18 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 			Summary:  "展示料箱搬运、工位交接与异常回退的完整流程。",
 			Category: "搬运",
 			Guide:    "部署步骤：导入搬运模型、加载巷道数据集、绑定交接模板、发布任务。",
+		},
+		{
+			Title:    "多模态告警联动案例",
+			Summary:  "展示音视频事件聚合、告警派发和异常升级的闭环流程。",
+			Category: "多模态告警",
+			Guide:    "部署步骤：绑定音视频模型、导入事件数据集、配置告警模板、联调通知链路。",
+		},
+		{
+			Title:    "产线质检复检案例",
+			Summary:  "展示缺陷检测、人工复核和复检回传的完整质量闭环。",
+			Category: "产线质检",
+			Guide:    "部署步骤：绑定质检模型、导入缺陷数据、配置复检模板、发布质检流程。",
 		},
 	} {
 		item, err := ensureSeedApplicationCase(db, spec)
@@ -803,6 +1083,24 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 			Link:    "/applications",
 			Pinned:  false,
 		},
+		{
+			Title:   "文档中心补充 5 组示例内容",
+			Summary: "平台指南、接入文档、FAQ 和视频教程均已补充可演示的测试数据。",
+			Link:    "/docs",
+			Pinned:  false,
+		},
+		{
+			Title:   "社区资料页已补充完整演示数据",
+			Summary: "个人中心、公开主页、关注关系、收藏与下载记录都已具备 5 条以上样例。",
+			Link:    "/me",
+			Pinned:  false,
+		},
+		{
+			Title:   "私信与协作空间增加演示样板",
+			Summary: "已补齐多条私信会话与协作空间，便于测试治理、消息和成员流转。",
+			Link:    "/messages",
+			Pinned:  false,
+		},
 	} {
 		if err := ensureSeedAnnouncement(db, spec); err != nil {
 			return err
@@ -810,6 +1108,13 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 	}
 
 	for _, spec := range []seedWikiSpec{
+		{
+			Title:    "巡检任务接入 Wiki",
+			Summary:  "记录移动作业和巡检模板接入的关键步骤。",
+			Content:  "接入建议：先确认设备参数，再绑定模型、数据集和任务模板，最后联调告警链路。",
+			EditorID: demo.ID,
+			Comment:  "补充巡检任务接入 Wiki",
+		},
 		{
 			Title:    "搬运任务模板参数说明",
 			Summary:  "整理仓储搬运任务中常用的模板字段与参数含义。",
@@ -823,6 +1128,20 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 			Content:  "联调建议：先通设备状态，再通告警回传，最后验证任务模板与通知链路的闭环。",
 			EditorID: opsUser.ID,
 			Comment:  "补充告警联调手册",
+		},
+		{
+			Title:    "夜间安防值守排班说明",
+			Summary:  "记录夜间安防巡逻的排班规则、告警等级和联动方式。",
+			Content:  "建议将夜间安防任务按时段拆分，分别绑定音视频事件阈值、告警升级规则和回传人群组。",
+			EditorID: reviewerUser.ID,
+			Comment:  "补充夜间安防说明",
+		},
+		{
+			Title:    "多模态告警事件字段约定",
+			Summary:  "统一音频、视频和状态告警的字段命名与事件层级。",
+			Content:  "建议统一 event_type、event_level、source_id、snapshot_url、review_status 等字段，保证多系统联动一致。",
+			EditorID: analystUser.ID,
+			Comment:  "补充告警字段约定",
 		},
 	} {
 		if err := ensureSeedWikiPage(db, spec); err != nil {
@@ -846,22 +1165,31 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 	for _, item := range []struct {
 		resourceType string
 		resourceID   uint
+		badgeLabel   string
 		sortOrder    int
 	}{
-		{resourceType: "model", resourceID: baseModel.ID, sortOrder: 1},
-		{resourceType: "model", resourceID: curatedModels[0].ID, sortOrder: 2},
-		{resourceType: "model", resourceID: curatedModels[1].ID, sortOrder: 3},
-		{resourceType: "dataset", resourceID: baseDataset.ID, sortOrder: 1},
-		{resourceType: "dataset", resourceID: curatedDatasets[0].ID, sortOrder: 2},
-		{resourceType: "dataset", resourceID: curatedDatasets[1].ID, sortOrder: 3},
-		{resourceType: "task-template", resourceID: baseTemplate.ID, sortOrder: 1},
-		{resourceType: "task-template", resourceID: curatedTemplates[0].ID, sortOrder: 2},
-		{resourceType: "task-template", resourceID: curatedTemplates[1].ID, sortOrder: 3},
-		{resourceType: "application-case", resourceID: baseAppCase.ID, sortOrder: 1},
-		{resourceType: "application-case", resourceID: curatedCases[0].ID, sortOrder: 2},
-		{resourceType: "application-case", resourceID: curatedCases[1].ID, sortOrder: 3},
+		{resourceType: "model", resourceID: baseModel.ID, badgeLabel: "编辑推荐", sortOrder: 1},
+		{resourceType: "model", resourceID: curatedModels[0].ID, badgeLabel: "场景精选", sortOrder: 2},
+		{resourceType: "model", resourceID: curatedModels[1].ID, badgeLabel: "抓取策略", sortOrder: 3},
+		{resourceType: "model", resourceID: curatedModels[2].ID, badgeLabel: "夜巡融合", sortOrder: 4},
+		{resourceType: "model", resourceID: curatedModels[3].ID, badgeLabel: "质检定位", sortOrder: 5},
+		{resourceType: "dataset", resourceID: baseDataset.ID, badgeLabel: "精选数据", sortOrder: 1},
+		{resourceType: "dataset", resourceID: curatedDatasets[0].ID, badgeLabel: "安全巡检", sortOrder: 2},
+		{resourceType: "dataset", resourceID: curatedDatasets[1].ID, badgeLabel: "仓储地图", sortOrder: 3},
+		{resourceType: "dataset", resourceID: curatedDatasets[2].ID, badgeLabel: "夜间音频", sortOrder: 4},
+		{resourceType: "dataset", resourceID: curatedDatasets[3].ID, badgeLabel: "质检样本", sortOrder: 5},
+		{resourceType: "task-template", resourceID: baseTemplate.ID, badgeLabel: "标准模板", sortOrder: 1},
+		{resourceType: "task-template", resourceID: curatedTemplates[0].ID, badgeLabel: "夜巡方案", sortOrder: 2},
+		{resourceType: "task-template", resourceID: curatedTemplates[1].ID, badgeLabel: "交接闭环", sortOrder: 3},
+		{resourceType: "task-template", resourceID: curatedTemplates[2].ID, badgeLabel: "告警聚合", sortOrder: 4},
+		{resourceType: "task-template", resourceID: curatedTemplates[3].ID, badgeLabel: "复检流程", sortOrder: 5},
+		{resourceType: "application-case", resourceID: baseAppCase.ID, badgeLabel: "场景案例", sortOrder: 1},
+		{resourceType: "application-case", resourceID: curatedCases[0].ID, badgeLabel: "园区方案", sortOrder: 2},
+		{resourceType: "application-case", resourceID: curatedCases[1].ID, badgeLabel: "产线实践", sortOrder: 3},
+		{resourceType: "application-case", resourceID: curatedCases[2].ID, badgeLabel: "告警联动", sortOrder: 4},
+		{resourceType: "application-case", resourceID: curatedCases[3].ID, badgeLabel: "质检闭环", sortOrder: 5},
 	} {
-		if err := ensureSeedFeaturedResource(db, item.resourceType, item.resourceID, item.sortOrder); err != nil {
+		if err := ensureSeedFeaturedResource(db, item.resourceType, item.resourceID, item.sortOrder, item.badgeLabel); err != nil {
 			return err
 		}
 	}
@@ -875,21 +1203,551 @@ func ensureV1SeedData(db *gorm.DB, storage *support.LocalStorage, secret string)
 		_ = db.Order("id asc").First(&appCase).Error
 		featuredResources := []model.FeaturedResource{}
 		if baseModel.ID > 0 {
-			featuredResources = append(featuredResources, model.FeaturedResource{ResourceType: "model", ResourceID: baseModel.ID, SortOrder: 1, Enabled: true})
+			featuredResources = append(featuredResources, model.FeaturedResource{ResourceType: "model", ResourceID: baseModel.ID, BadgeLabel: "编辑推荐", SortOrder: 1, Enabled: true})
 		}
 		if baseDataset.ID > 0 {
-			featuredResources = append(featuredResources, model.FeaturedResource{ResourceType: "dataset", ResourceID: baseDataset.ID, SortOrder: 1, Enabled: true})
+			featuredResources = append(featuredResources, model.FeaturedResource{ResourceType: "dataset", ResourceID: baseDataset.ID, BadgeLabel: "精选数据", SortOrder: 1, Enabled: true})
 		}
 		if baseTemplate.ID > 0 {
-			featuredResources = append(featuredResources, model.FeaturedResource{ResourceType: "task-template", ResourceID: baseTemplate.ID, SortOrder: 1, Enabled: true})
+			featuredResources = append(featuredResources, model.FeaturedResource{ResourceType: "task-template", ResourceID: baseTemplate.ID, BadgeLabel: "标准模板", SortOrder: 1, Enabled: true})
 		}
 		if appCase.ID > 0 {
-			featuredResources = append(featuredResources, model.FeaturedResource{ResourceType: "application-case", ResourceID: appCase.ID, SortOrder: 1, Enabled: true})
+			featuredResources = append(featuredResources, model.FeaturedResource{ResourceType: "application-case", ResourceID: appCase.ID, BadgeLabel: "场景案例", SortOrder: 1, Enabled: true})
 		}
 		if len(featuredResources) > 0 {
 			if err := db.Create(&featuredResources).Error; err != nil {
 				return err
 			}
+		}
+	}
+
+	for _, spec := range []seedScenePageSpec{
+		{
+			Slug:        "patrol-inspection",
+			Name:        "巡逻巡检",
+			Tagline:     "Patrol Inspection",
+			Summary:     "聚合巡逻巡检场景下的模型、数据集、模板与案例。",
+			Description: "面向楼宇、园区和工厂巡逻巡检任务，提供从识别、告警到执行模板的一站式资源入口。",
+			SortOrder:   10,
+		},
+		{
+			Slug:        "warehouse-ops",
+			Name:        "仓储搬运",
+			Tagline:     "Warehouse Operation",
+			Summary:     "聚合仓储搬运、交接和巷道通行的资源组合。",
+			Description: "围绕仓储搬运任务的定位、抓取、交接和异常回退流程，集中整理高频可复用资源。",
+			SortOrder:   20,
+		},
+		{
+			Slug:        "campus-guard",
+			Name:        "园区值守",
+			Tagline:     "Campus Guard",
+			Summary:     "聚合园区值守、夜间巡逻和异常上报的专题资源。",
+			Description: "帮助开发者快速定位园区值守场景下的巡逻模型、数据集、模板与案例配置。",
+			SortOrder:   30,
+		},
+		{
+			Slug:        "factory-quality",
+			Name:        "产线质检",
+			Tagline:     "Factory Quality",
+			Summary:     "聚合产线质检、复检和异常回传相关资源。",
+			Description: "围绕产线质检场景提供缺陷定位模型、质检数据集、复检模板和业务案例。",
+			SortOrder:   40,
+		},
+		{
+			Slug:        "multimodal-alert",
+			Name:        "多模态告警",
+			Tagline:     "Multimodal Alert",
+			Summary:     "聚合多模态告警联动、事件聚合和通知分发资源。",
+			Description: "适用于音视频、状态事件等多源信息融合告警场景，支持聚合与分发闭环测试。",
+			SortOrder:   50,
+		},
+	} {
+		if _, err := ensureSeedScenePage(db, spec); err != nil {
+			return err
+		}
+	}
+
+	var platformCategory model.DocumentCategory
+	if err := db.Where("name = ?", "平台指南").First(&platformCategory).Error; err != nil {
+		return err
+	}
+	var technicalCategory model.DocumentCategory
+	if err := db.Where("name = ?", "接入文档").First(&technicalCategory).Error; err != nil {
+		return err
+	}
+
+	for _, spec := range []seedDocumentSpec{
+		{
+			CategoryID: platformCategory.ID,
+			Title:      "开放社区使用指南",
+			Summary:    "快速了解门户、资源上传、审核和下载流程。",
+			Content:    "使用流程：注册登录 -> 上传资源 -> 提交审核 -> 审核通过后展示与下载。",
+			DocType:    "platform",
+		},
+		{
+			CategoryID: technicalCategory.ID,
+			Title:      "机器人接入说明",
+			Summary:    "说明机器人类型、任务模板和资源引用关系。",
+			Content:    "接入步骤：准备设备参数 -> 选择模型与数据集 -> 导入模板 -> 调试运行。",
+			DocType:    "technical",
+		},
+		{
+			CategoryID: platformCategory.ID,
+			Title:      "数据集授权下载说明",
+			Summary:    "说明协议确认、审批、授权有效期和下载次数限制。",
+			Content:    "建议在下载前先核对权限级别、审批状态、有效期和剩余下载次数，再生成下载或分批任务。",
+			DocType:    "platform",
+		},
+		{
+			CategoryID: technicalCategory.ID,
+			Title:      "搜索与筛选接入约定",
+			Summary:    "说明搜索关键词、筛选字典和资源标签的接入规则。",
+			Content:    "建议统一标签、场景、分类和推荐词配置，保持模型、数据集和模板在搜索结果中的一致性。",
+			DocType:    "technical",
+		},
+		{
+			CategoryID: platformCategory.ID,
+			Title:      "协作空间治理说明",
+			Summary:    "说明私信治理、协作空间封禁、成员移除和审计日志。",
+			Content:    "后台可对私信和协作空间执行封禁、解封、成员移除等治理动作，并记录管理操作日志。",
+			DocType:    "platform",
+		},
+	} {
+		if _, err := ensureSeedDocument(db, spec); err != nil {
+			return err
+		}
+	}
+
+	for _, spec := range []seedFAQSpec{
+		{Question: "如何上传模型？", Answer: "登录后进入模型上传页，填写元数据并上传模型文件即可。"},
+		{Question: "数据集下载前为何需要确认协议？", Answer: "用于记录数据集下载协议接受情况，保障资源使用合规。"},
+		{Question: "为什么有些数据集需要审批？", Answer: "受限或内部数据集会按权限矩阵执行审批、授权有效期和下载次数控制。"},
+		{Question: "协作空间能做什么？", Answer: "可用于围绕模型、数据集和模板进行成员协作、消息同步和治理演示。"},
+		{Question: "搜索推荐词在哪里维护？", Answer: "管理员可在门户运营页维护热门词、推荐词和筛选字典。"},
+	} {
+		if _, err := ensureSeedFAQ(db, spec); err != nil {
+			return err
+		}
+	}
+
+	for _, spec := range []seedVideoSpec{
+		{
+			Title:     "开放社区五分钟上手",
+			Summary:   "快速了解首页、资源上传、审核和下载流程。",
+			Link:      "https://example.com/videos/getting-started",
+			Category:  "平台指南",
+			SortOrder: 1,
+		},
+		{
+			Title:     "机器人接入与模板绑定演示",
+			Summary:   "演示如何把模型、数据集和模板串起来完成联调。",
+			Link:      "https://example.com/videos/integration-demo",
+			Category:  "接入实践",
+			SortOrder: 2,
+		},
+		{
+			Title:     "夜间安防告警联动演示",
+			Summary:   "演示夜间安防场景中的音视频告警联动和通知闭环。",
+			Link:      "https://example.com/videos/night-security-demo",
+			Category:  "场景演示",
+			SortOrder: 3,
+		},
+		{
+			Title:     "产线质检复检流程演示",
+			Summary:   "演示缺陷检测、人工复核和复检回传流程。",
+			Link:      "https://example.com/videos/factory-quality-demo",
+			Category:  "场景演示",
+			SortOrder: 4,
+		},
+		{
+			Title:     "社区治理后台操作演示",
+			Summary:   "演示私信、协作空间、评论和讨论的治理链路。",
+			Link:      "https://example.com/videos/community-governance",
+			Category:  "后台运营",
+			SortOrder: 5,
+		},
+	} {
+		if _, err := ensureSeedVideo(db, spec); err != nil {
+			return err
+		}
+	}
+
+	for _, spec := range []seedSkillSpec{
+		{
+			Name:        "巡检告警上报技能",
+			Summary:     "把巡检任务中的异常告警统一封装成可复用技能。",
+			Description: "适用于移动作业和巡逻巡检流程中的告警上传与状态同步。",
+			Category:    "巡逻巡检",
+			Scene:       "巡逻巡检",
+			Guide:       "接入告警源 -> 配置 webhook -> 绑定任务模板 -> 验证状态同步。",
+			ResourceRef: "Warehouse Carrier Net,Inspection Route Set",
+			OwnerID:     demo.ID,
+			UsageCount:  8,
+		},
+		{
+			Name:        "夜间视频巡逻编排技能",
+			Summary:     "用于夜间安防任务中的视频采集、事件汇总和告警上报。",
+			Description: "适用于夜间安防、低照巡逻和园区值守流程中的视频巡逻编排。",
+			Category:    "夜间安防",
+			Scene:       "夜间安防",
+			Guide:       "配置巡逻点位 -> 绑定音视频模型 -> 设置事件阈值 -> 联调通知链路。",
+			ResourceRef: "Night Security Audio Fusion,Night Security Audio Event Pack",
+			OwnerID:     demo.ID,
+			UsageCount:  7,
+		},
+		{
+			Name:        "巷道搬运交接校验技能",
+			Summary:     "用于仓储搬运交接前后的状态确认与失败回退。",
+			Description: "适用于仓储搬运、入出库交接和工位交互场景中的状态校验。",
+			Category:    "仓储搬运",
+			Scene:       "仓储搬运",
+			Guide:       "绑定工位 -> 设置交接字段 -> 配置失败回退规则 -> 发布执行。",
+			ResourceRef: "Sorting Cell Grasp Policy,Forklift Aisle Mapping Pack",
+			OwnerID:     demo.ID,
+			UsageCount:  6,
+		},
+		{
+			Name:        "产线缺陷复检协同技能",
+			Summary:     "把缺陷初检、人工复核和复检回传整理成可复用步骤。",
+			Description: "适用于产线质检、复检和异常复盘场景中的协同流程封装。",
+			Category:    "产线质检",
+			Scene:       "产线质检",
+			Guide:       "绑定缺陷模型 -> 配置复检字段 -> 接入回传接口 -> 联调工单关闭。",
+			ResourceRef: "Factory Quality Defect Locator,Factory Quality Defect Set",
+			OwnerID:     demo.ID,
+			UsageCount:  5,
+		},
+		{
+			Name:        "多传感告警聚合技能",
+			Summary:     "适用于多模态告警场景下的事件聚合与升级分发。",
+			Description: "用于多传感巡逻、状态监控和音视频事件融合后的告警治理流程。",
+			Category:    "多模态告警",
+			Scene:       "多模态告警",
+			Guide:       "接入多源事件 -> 配置聚合规则 -> 设置升级策略 -> 发布告警闭环。",
+			ResourceRef: "Night Security Audio Fusion,多模态告警联动模板",
+			OwnerID:     demo.ID,
+			UsageCount:  9,
+		},
+	} {
+		if _, err := ensureSeedSkill(db, spec); err != nil {
+			return err
+		}
+	}
+
+	for _, spec := range []seedDiscussionSpec{
+		{
+			Title:    "移动作业模板如何接入现有机器人？",
+			Summary:  "讨论模板资源和设备参数之间的最小接入集。",
+			Content:  "想确认在已有机器人项目里，模板与模型的依赖绑定最少需要准备哪些参数。",
+			Category: "接入讨论",
+			UserID:   demo.ID,
+		},
+		{
+			Title:    "夜间安防巡检模型怎么做告警阈值校准？",
+			Summary:  "讨论夜间安防场景里音视频联合阈值的校准策略。",
+			Content:  "目前夜间场景里误报偏高，想确认音频和视频事件在联合告警时应该如何设置阈值分层。",
+			Category: "夜间安防",
+			UserID:   demo.ID,
+		},
+		{
+			Title:    "仓储搬运交接环节如何设计失败回退？",
+			Summary:  "讨论交接确认、状态回滚和失败重试的设计边界。",
+			Content:  "在搬运交接过程中，遇到工位响应超时或识别失败时，大家一般怎么设计回退和重试策略？",
+			Category: "仓储搬运",
+			UserID:   demo.ID,
+		},
+		{
+			Title:    "点云与视觉联合巡检是否值得默认开启？",
+			Summary:  "讨论多传感巡检在精度和成本之间的取舍。",
+			Content:  "当前在巡检车上可同时启用点云和视觉，想了解在演示环境里默认开启是否值得，还是先保留轻量组合更合适。",
+			Category: "多模态告警",
+			UserID:   demo.ID,
+		},
+		{
+			Title:    "产线质检复检模板需要哪些最小输入？",
+			Summary:  "讨论质检复检流程里最关键的字段设计。",
+			Content:  "准备把产线质检做成模板，想确认缺陷类别、工位编号、复检状态和关闭原因是否应作为必填字段。",
+			Category: "产线质检",
+			UserID:   demo.ID,
+		},
+	} {
+		if _, err := ensureSeedDiscussion(db, spec); err != nil {
+			return err
+		}
+	}
+
+	var seededSkills []model.Skill
+	if err := db.Where("owner_id = ?", demo.ID).Order("updated_at desc").Find(&seededSkills).Error; err != nil {
+		return err
+	}
+	var seededDiscussions []model.Discussion
+	if err := db.Where("user_id = ?", demo.ID).Order("updated_at desc").Find(&seededDiscussions).Error; err != nil {
+		return err
+	}
+
+	commentTargets := []struct {
+		resourceType string
+		resourceID   uint
+		userID       uint
+		content      string
+	}{
+		{resourceType: "model", resourceID: baseModel.ID, userID: admin.ID, content: "这个模型的部署链路比较顺，适合首页展示。"},
+		{resourceType: "model", resourceID: curatedModels[2].ID, userID: reviewerUser.ID, content: "夜间安防场景下建议结合音频阈值一起调。"},
+		{resourceType: "dataset", resourceID: baseDataset.ID, userID: integrator.ID, content: "巡检线路样本组织得比较规范，适合做快速验证。"},
+		{resourceType: "dataset", resourceID: curatedDatasets[3].ID, userID: analystUser.ID, content: "产线质检样本的缺陷划分维度比较清晰。"},
+		{resourceType: "task-template", resourceID: curatedTemplates[0].ID, userID: opsUser.ID, content: "夜间巡检模板的告警闭环配置很完整。"},
+		{resourceType: "skill", resourceID: seededSkills[0].ID, userID: maintainerUser.ID, content: "这个技能拆分得很细，适合作为团队复用基线。"},
+		{resourceType: "discussion", resourceID: seededDiscussions[0].ID, userID: admin.ID, content: "建议先把设备字段和模板参数一一映射，再做最小接入。"},
+		{resourceType: "discussion", resourceID: seededDiscussions[3].ID, userID: qaUser.ID, content: "多传感默认开启前最好先压一轮性能和误报率。"},
+	}
+	for _, item := range commentTargets {
+		if item.resourceID == 0 {
+			continue
+		}
+		if err := ensureSeedComment(db, item.resourceType, item.resourceID, item.userID, item.content); err != nil {
+			return err
+		}
+	}
+
+	for _, item := range []struct {
+		query       string
+		keywordType string
+		sortOrder   int
+	}{
+		{query: "巡检", keywordType: "hot", sortOrder: 1},
+		{query: "搬运", keywordType: "hot", sortOrder: 2},
+		{query: "夜间安防", keywordType: "hot", sortOrder: 3},
+		{query: "产线质检", keywordType: "hot", sortOrder: 4},
+		{query: "多模态告警", keywordType: "hot", sortOrder: 5},
+		{query: "夜间安防", keywordType: "recommended", sortOrder: 1},
+		{query: "仓储搬运", keywordType: "recommended", sortOrder: 2},
+		{query: "巡逻巡检", keywordType: "recommended", sortOrder: 3},
+		{query: "产线质检", keywordType: "recommended", sortOrder: 4},
+		{query: "多模态告警", keywordType: "recommended", sortOrder: 5},
+	} {
+		if err := ensureSeedSearchKeyword(db, item.query, item.keywordType, item.sortOrder); err != nil {
+			return err
+		}
+	}
+
+	for _, item := range []struct {
+		query      string
+		searchType string
+	}{
+		{query: "巡检", searchType: "dataset"},
+		{query: "巡检", searchType: "task-template"},
+		{query: "搬运", searchType: "model"},
+		{query: "部署", searchType: "doc"},
+		{query: "夜间安防", searchType: "model"},
+		{query: "夜间安防", searchType: "dataset"},
+		{query: "产线质检", searchType: "dataset"},
+		{query: "产线质检", searchType: "task-template"},
+		{query: "多模态告警", searchType: "skill"},
+		{query: "多模态告警", searchType: "discussion"},
+	} {
+		if err := ensureSeedSearchRecord(db, item.query, item.searchType); err != nil {
+			return err
+		}
+	}
+
+	displayResources := []struct {
+		resourceType string
+		resourceID   uint
+		title        string
+	}{
+		{resourceType: "model", resourceID: baseModel.ID, title: baseModel.Name},
+		{resourceType: "model", resourceID: curatedModels[0].ID, title: curatedModels[0].Name},
+		{resourceType: "dataset", resourceID: baseDataset.ID, title: baseDataset.Name},
+		{resourceType: "dataset", resourceID: curatedDatasets[0].ID, title: curatedDatasets[0].Name},
+		{resourceType: "task-template", resourceID: baseTemplate.ID, title: baseTemplate.Name},
+	}
+	for _, item := range displayResources {
+		if item.resourceID == 0 {
+			continue
+		}
+		if err := ensureSeedFavorite(db, demo.ID, item.resourceType, item.resourceID, item.title); err != nil {
+			return err
+		}
+		if err := ensureSeedDownload(db, demo.ID, item.resourceType, item.resourceID, item.title); err != nil {
+			return err
+		}
+	}
+
+	for _, item := range []struct {
+		notifyType string
+		title      string
+		content    string
+	}{
+		{notifyType: "system", title: "欢迎加入开放社区", content: "你可以先浏览门户首页，再尝试上传模型或数据集。"},
+		{notifyType: "resource", title: "示例模型已发布", content: "你可以在模型仓库查看 Warehouse Carrier Net。"},
+		{notifyType: "review", title: "夜间安防模板已进入展示区", content: "夜间安防巡检模板已进入首页专题资源，可继续完善说明与案例。"},
+		{notifyType: "community", title: "你的讨论收到新回复", content: "“仓储搬运交接环节如何设计失败回退？”已有新的社区回复。"},
+		{notifyType: "reward", title: "积分与权益样例已补充", content: "你的个人中心已补齐积分账本、兑换记录和权益示例数据。"},
+	} {
+		if err := ensureSeedNotification(db, demo.ID, item.notifyType, item.title, item.content); err != nil {
+			return err
+		}
+	}
+
+	for _, followedUserID := range []uint{integrator.ID, opsUser.ID, reviewerUser.ID, maintainerUser.ID, creatorUser.ID} {
+		if err := ensureSeedFollow(db, demo.ID, followedUserID); err != nil {
+			return err
+		}
+	}
+	for _, followerID := range []uint{admin.ID, integrator.ID, opsUser.ID, reviewerUser.ID, analystUser.ID} {
+		if err := ensureSeedFollow(db, followerID, demo.ID); err != nil {
+			return err
+		}
+	}
+
+	for _, spec := range []seedRewardSpec{
+		{UserID: demo.ID, SourceType: "seed_skill", Points: 30, Remark: "示例技能发布"},
+		{UserID: demo.ID, SourceType: "seed_discussion", Points: 10, Remark: "示例讨论创建"},
+		{UserID: demo.ID, SourceType: "seed_model_showcase", Points: 60, Remark: "模型专题样例补充"},
+		{UserID: demo.ID, SourceType: "seed_dataset_showcase", Points: 50, Remark: "数据集专题样例补充"},
+		{UserID: demo.ID, SourceType: "seed_template_showcase", Points: 45, Remark: "模板专题样例补充"},
+		{UserID: demo.ID, SourceType: "seed_wiki_showcase", Points: 45, Remark: "Wiki 与资料页样例补充"},
+		{UserID: admin.ID, SourceType: "seed_admin", Points: 5, Remark: "示例运营积分"},
+		{UserID: reviewerUser.ID, SourceType: "seed_review", Points: 22, Remark: "审核演示积分"},
+		{UserID: maintainerUser.ID, SourceType: "seed_maintain", Points: 19, Remark: "社区维护积分"},
+		{UserID: analystUser.ID, SourceType: "seed_analysis", Points: 17, Remark: "数据分析积分"},
+		{UserID: creatorUser.ID, SourceType: "seed_creator", Points: 21, Remark: "内容策划积分"},
+		{UserID: qaUser.ID, SourceType: "seed_qa", Points: 15, Remark: "测试验证积分"},
+	} {
+		if err := ensureSeedReward(db, spec); err != nil {
+			return err
+		}
+	}
+
+	benefitSpecs := []struct {
+		name       string
+		summary    string
+		costPoints int
+	}{
+		{name: "首页创作者标识", summary: "兑换后可在公开开发者页显示创作者标识。", costPoints: 20},
+		{name: "社区推荐位申请", summary: "兑换后可获得一次社区首页推荐位申请资格。", costPoints: 40},
+		{name: "协作空间扩容", summary: "兑换后可为一个协作空间增加更多成员名额。", costPoints: 60},
+		{name: "专题页案例露出", summary: "兑换后可获得一次场景专题页案例展示机会。", costPoints: 45},
+		{name: "数据集授权加急通道", summary: "兑换后可为一次数据集授权申请开启加急处理。", costPoints: 35},
+	}
+	seededBenefits := make([]model.RewardBenefit, 0, len(benefitSpecs))
+	for _, spec := range benefitSpecs {
+		item, err := ensureSeedRewardBenefit(db, spec.name, spec.summary, spec.costPoints)
+		if err != nil {
+			return err
+		}
+		seededBenefits = append(seededBenefits, *item)
+	}
+	for _, item := range seededBenefits {
+		if err := ensureSeedRewardRedemption(db, demo.ID, item); err != nil {
+			return err
+		}
+	}
+
+	accessExpiryShort := time.Now().Add(7 * 24 * time.Hour)
+	accessExpiryLong := time.Now().Add(30 * 24 * time.Hour)
+	reviewedAt := time.Now().Add(-6 * time.Hour)
+	for _, item := range []seedAccessRequestSpec{
+		{
+			DatasetID:         baseDataset.ID,
+			UserID:            demo.ID,
+			Reason:            "需要用于巡逻巡检流程联调与样例展示。",
+			Status:            "approved",
+			ReviewComment:     "已授权用于演示环境验证。",
+			ApprovalStage:     1,
+			RequiredApprovals: 1,
+			ApprovalExpiresAt: &accessExpiryLong,
+			DownloadLimit:     10,
+			DownloadCount:     2,
+			ReviewedBy:        &admin.ID,
+			ReviewedAt:        &reviewedAt,
+		},
+		{
+			DatasetID:         curatedDatasets[0].ID,
+			UserID:            demo.ID,
+			Reason:            "用于夜间安防与安全巡检样例页展示。",
+			Status:            "approved",
+			ReviewComment:     "已通过，可继续生成下载包。",
+			ApprovalStage:     1,
+			RequiredApprovals: 1,
+			ApprovalExpiresAt: &accessExpiryShort,
+			DownloadLimit:     6,
+			DownloadCount:     1,
+			ReviewedBy:        &admin.ID,
+			ReviewedAt:        &reviewedAt,
+		},
+		{
+			DatasetID:         curatedDatasets[1].ID,
+			UserID:            demo.ID,
+			Reason:            "用于仓储搬运巷道地图样例测试。",
+			Status:            "pending",
+			ReviewComment:     "",
+			ApprovalStage:     0,
+			RequiredApprovals: 1,
+		},
+		{
+			DatasetID:         curatedDatasets[2].ID,
+			UserID:            demo.ID,
+			Reason:            "用于多模态告警音频事件测试。",
+			Status:            "rejected",
+			ReviewComment:     "请补充使用场景和保留时长说明。",
+			ApprovalStage:     0,
+			RequiredApprovals: 1,
+			ReviewedBy:        &admin.ID,
+			ReviewedAt:        &reviewedAt,
+		},
+		{
+			DatasetID:         curatedDatasets[3].ID,
+			UserID:            demo.ID,
+			Reason:            "用于产线质检复检流程联调。",
+			Status:            "pending",
+			ReviewComment:     "",
+			ApprovalStage:     1,
+			RequiredApprovals: 2,
+		},
+	} {
+		if item.DatasetID == 0 {
+			continue
+		}
+		if err := ensureSeedAccessRequest(db, item); err != nil {
+			return err
+		}
+	}
+
+	for _, item := range []struct {
+		peer    uint
+		title   string
+		content string
+		sender  uint
+	}{
+		{peer: admin.ID, title: "管理员与开发者私信", content: "欢迎加入开放社区，如需协作可以直接在这里沟通。", sender: admin.ID},
+		{peer: integrator.ID, title: "开发者与接入工程师私信", content: "巡检模板和模型已经同步，准备开始联调。", sender: integrator.ID},
+		{peer: opsUser.ID, title: "开发者与运营同学私信", content: "首页展示位的文案和资源标签已经更新。", sender: opsUser.ID},
+		{peer: reviewerUser.ID, title: "开发者与审核同学私信", content: "请再补一版使用说明，我这边可以继续审核。", sender: reviewerUser.ID},
+		{peer: maintainerUser.ID, title: "开发者与社区维护私信", content: "技能页和讨论区的演示数据已经补充完毕。", sender: maintainerUser.ID},
+	} {
+		if _, err := ensureDirectConversation(db, demo.ID, item.peer, item.title, item.content, item.sender); err != nil {
+			return err
+		}
+	}
+
+	for _, item := range []struct {
+		name     string
+		summary  string
+		ownerID  uint
+		members  []uint
+		senderID uint
+		content  string
+	}{
+		{name: "巡检联调空间", summary: "用于巡逻巡检模型、数据集和模板的联合验证。", ownerID: demo.ID, members: []uint{admin.ID, integrator.ID}, senderID: demo.ID, content: "巡检联调资源已就绪，今天先验证异常上报链路。"},
+		{name: "夜间安防值守空间", summary: "用于夜间安防音视频告警与通知闭环验证。", ownerID: demo.ID, members: []uint{reviewerUser.ID, opsUser.ID}, senderID: reviewerUser.ID, content: "夜间值守模板需要补一版弱光阈值配置。"},
+		{name: "仓储搬运交接空间", summary: "用于仓储搬运交接、失败回退和回传联调。", ownerID: integrator.ID, members: []uint{demo.ID, maintainerUser.ID}, senderID: integrator.ID, content: "交接失败回退策略已经按新模板更新。"},
+		{name: "产线质检复检空间", summary: "用于产线质检缺陷复检和工单关闭演示。", ownerID: analystUser.ID, members: []uint{demo.ID, qaUser.ID}, senderID: analystUser.ID, content: "质检复检模板已绑定到新的缺陷数据集。"},
+		{name: "多模态告警治理空间", summary: "用于多模态告警聚合与治理策略验证。", ownerID: opsUser.ID, members: []uint{demo.ID, admin.ID, creatorUser.ID}, senderID: opsUser.ID, content: "告警升级规则和社区治理流程可以一起做联调。"},
+	} {
+		if _, err := ensureWorkspaceSeed(db, item.name, item.summary, item.ownerID, item.members, item.senderID, item.content); err != nil {
+			return err
 		}
 	}
 
@@ -1483,7 +2341,7 @@ func ensureSeedReward(db *gorm.DB, spec seedRewardSpec) error {
 	}).Error
 }
 
-func ensureSeedFeaturedResource(db *gorm.DB, resourceType string, resourceID uint, sortOrder int) error {
+func ensureSeedFeaturedResource(db *gorm.DB, resourceType string, resourceID uint, sortOrder int, badgeLabel string) error {
 	if resourceID == 0 {
 		return nil
 	}
@@ -1492,8 +2350,9 @@ func ensureSeedFeaturedResource(db *gorm.DB, resourceType string, resourceID uin
 	err := db.Where("resource_type = ? AND resource_id = ?", resourceType, resourceID).First(&item).Error
 	if err == nil {
 		return db.Model(&item).Updates(map[string]any{
-			"sort_order": sortOrder,
-			"enabled":    true,
+			"badge_label": badgeLabel,
+			"sort_order":  sortOrder,
+			"enabled":     true,
 		}).Error
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1503,6 +2362,7 @@ func ensureSeedFeaturedResource(db *gorm.DB, resourceType string, resourceID uin
 	return db.Create(&model.FeaturedResource{
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
+		BadgeLabel:   badgeLabel,
 		SortOrder:    sortOrder,
 		Enabled:      true,
 	}).Error

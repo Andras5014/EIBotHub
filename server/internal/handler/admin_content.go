@@ -41,6 +41,160 @@ func (h *Handler) adminUpdatePortalModule(c *gin.Context) {
 	support.RespondMessage(c, "module setting updated", nil)
 }
 
+func (h *Handler) adminHomeHeroConfig(c *gin.Context) {
+	data, err := h.admin.HomeHeroConfig()
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminUpdateHomeHeroConfig(c *gin.Context) {
+	var input dto.HomeHeroConfigRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, homeHeroLabels)))
+		return
+	}
+	data, err := h.admin.UpdateHomeHeroConfig(input)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminHomeHighlights(c *gin.Context) {
+	data, err := h.admin.HomeHighlights()
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminCreateHomeHighlight(c *gin.Context) {
+	var input dto.HomeHighlightRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, homeHighlightLabels)))
+		return
+	}
+	data, err := h.admin.CreateHomeHighlight(input)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondCreated(c, data)
+}
+
+func (h *Handler) adminUpdateHomeHighlight(c *gin.Context) {
+	var input dto.HomeHighlightRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, homeHighlightLabels)))
+		return
+	}
+	data, err := h.admin.UpdateHomeHighlight(parseUintParam(c, "id"), input)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminDeleteHomeHighlight(c *gin.Context) {
+	if err := h.admin.DeleteHomeHighlight(parseUintParam(c, "id")); err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondMessage(c, "home highlight deleted", nil)
+}
+
+func (h *Handler) listScenePages(c *gin.Context) {
+	data, err := h.portal.ScenePages()
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) scenePageDetail(c *gin.Context) {
+	data, err := h.portal.ScenePageDetail(c.Param("slug"))
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminScenePages(c *gin.Context) {
+	data, err := h.admin.ScenePages()
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminCreateScenePage(c *gin.Context) {
+	var input dto.ScenePageRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, scenePageLabels)))
+		return
+	}
+	data, err := h.admin.CreateScenePage(input)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondCreated(c, data)
+}
+
+func (h *Handler) adminUpdateScenePage(c *gin.Context) {
+	var input dto.ScenePageRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, scenePageLabels)))
+		return
+	}
+	data, err := h.admin.UpdateScenePage(parseUintParam(c, "id"), input)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminDeleteScenePage(c *gin.Context) {
+	if err := h.admin.DeleteScenePage(parseUintParam(c, "id")); err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondMessage(c, "scene page deleted", nil)
+}
+
+func (h *Handler) adminRankingConfig(c *gin.Context) {
+	data, err := h.admin.RankingConfig()
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminUpdateRankingConfig(c *gin.Context) {
+	var input dto.RankingConfigRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, rankingConfigLabels)))
+		return
+	}
+	data, err := h.admin.UpdateRankingConfig(input)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
 func (h *Handler) adminFeaturedResources(c *gin.Context) {
 	data, err := h.admin.FeaturedResources()
 	if err != nil {
@@ -574,4 +728,74 @@ func (h *Handler) adminDeletePrivacyOption(c *gin.Context) {
 		return
 	}
 	support.RespondMessage(c, "privacy option deleted", nil)
+}
+
+func (h *Handler) adminFilterOptions(c *gin.Context) {
+	data, err := h.admin.FilterOptionConfigs(c.Query("kind"))
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminCreateFilterOption(c *gin.Context) {
+	var input dto.FilterOptionConfigRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, filterOptionLabels)))
+		return
+	}
+	claims := middleware.MustClaims(c)
+	data, err := h.admin.CreateFilterOptionConfig(claims.UserID, input)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondCreated(c, data)
+}
+
+func (h *Handler) adminUpdateFilterOption(c *gin.Context) {
+	var input dto.FilterOptionConfigRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, filterOptionLabels)))
+		return
+	}
+	claims := middleware.MustClaims(c)
+	data, err := h.admin.UpdateFilterOptionConfig(parseUintParam(c, "id"), claims.UserID, input)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminDeleteFilterOption(c *gin.Context) {
+	claims := middleware.MustClaims(c)
+	if err := h.admin.DeleteFilterOptionConfig(parseUintParam(c, "id"), claims.UserID); err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondMessage(c, "filter option deleted", nil)
+}
+
+func (h *Handler) adminModelRecommendTags(c *gin.Context) {
+	data, err := h.models.AdminRecommendTags()
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminUpdateModelRecommendTag(c *gin.Context) {
+	var input dto.ModelRecommendTagRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, modelRecommendTagLabels)))
+		return
+	}
+	if err := h.models.UpdateRecommendTag(parseUintParam(c, "id"), input); err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondMessage(c, "model recommend tag updated", nil)
 }

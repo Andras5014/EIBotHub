@@ -87,11 +87,12 @@ func (s *AuthService) issue(user *model.User) *dto.AuthResponse {
 
 func toUserSummary(user model.User) dto.UserSummary {
 	return dto.UserSummary{
-		ID:       user.ID,
-		Username: user.Username,
-		Email:    user.Email,
-		Role:     user.Role,
-		Bio:      user.Bio,
-		Avatar:   user.Avatar,
+		ID:          user.ID,
+		Username:    user.Username,
+		Email:       user.Email,
+		Role:        user.Role,
+		Permissions: model.RolePermissions(user.Role),
+		Bio:         user.Bio,
+		Avatar:      user.Avatar,
 	}
 }
