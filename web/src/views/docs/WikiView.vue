@@ -12,8 +12,11 @@
         <a-col :xs="24" :lg="7">
           <a-card title="词条列表" class="inner-card">
             <a-space direction="vertical" style="width: 100%">
-              <RouterLink to="/wiki">
+              <RouterLink v-if="canEdit" to="/wiki">
                 <a-button block>新建词条</a-button>
+              </RouterLink>
+              <RouterLink v-else to="/login" :query="{ redirect: '/wiki' }">
+                <a-button block>登录后新建词条</a-button>
               </RouterLink>
               <a-list :data-source="pages">
                 <template #renderItem="{ item }">
@@ -41,22 +44,32 @@
                 <span class="pill-meta">更新时间：{{ formatDate(selected.updated_at) }}</span>
               </a-space>
             </template>
-            <a-empty v-else description="请先选择词条或新建词条" />
+            <a-empty v-else :description="canEdit ? '请先选择词条或新建词条' : '请先选择词条'" />
           </a-card>
         </a-col>
 
         <a-col :xs="24" :lg="7">
-          <a-card title="编辑 / 修订" class="inner-card">
-            <a-form :model="form" layout="vertical" @finish="submit">
-              <a-form-item label="标题"><a-input v-model:value="form.title" /></a-form-item>
-              <a-form-item label="摘要"><a-input v-model:value="form.summary" /></a-form-item>
-              <a-form-item label="内容"><a-textarea v-model:value="form.content" :rows="8" /></a-form-item>
-              <a-form-item label="修订说明"><a-input v-model:value="form.comment" /></a-form-item>
-              <a-form-item>
-                <a-button type="primary" html-type="submit">{{ selected ? '更新词条' : '创建词条' }}</a-button>
-              </a-form-item>
-            </a-form>
-            <a-divider />
+          <a-card :title="canEdit ? '编辑 / 修订' : '修订历史'" class="inner-card">
+            <template v-if="canEdit">
+              <a-form :model="form" layout="vertical" @finish="submit">
+                <a-form-item label="标题"><a-input v-model:value="form.title" /></a-form-item>
+                <a-form-item label="摘要"><a-input v-model:value="form.summary" /></a-form-item>
+                <a-form-item label="内容"><a-textarea v-model:value="form.content" :rows="8" /></a-form-item>
+                <a-form-item label="修订说明"><a-input v-model:value="form.comment" /></a-form-item>
+                <a-form-item>
+                  <a-button type="primary" html-type="submit">{{ selected ? '更新词条' : '创建词条' }}</a-button>
+                </a-form-item>
+              </a-form>
+              <a-divider />
+            </template>
+            <a-alert
+              v-else
+              type="info"
+              show-icon
+              style="margin-bottom: 16px"
+              message="未登录时只能浏览 Wiki"
+              description="登录后才可以新建词条、编辑内容和提交修订。"
+            />
             <a-list :data-source="revisions" header="修订历史">
               <template #renderItem="{ item }">
                 <a-list-item>
@@ -72,18 +85,21 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 
 import { api } from '@/api';
+import { useAuthStore } from '@/stores/auth';
 import type { WikiPageItem, WikiRevisionItem } from '@/types/api';
 
+const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const pages = ref<WikiPageItem[]>([]);
 const revisions = ref<WikiRevisionItem[]>([]);
 const selected = ref<WikiPageItem>();
+const canEdit = computed(() => auth.isAuthenticated);
 const form = reactive({
   title: '',
   summary: '',
@@ -93,6 +109,9 @@ const form = reactive({
 
 async function loadPages() {
   pages.value = await api.listWikiPages();
+  if (!canEdit.value && !route.params.id && pages.value.length) {
+    await router.replace(`/wiki/${pages.value[0].id}`);
+  }
 }
 
 async function loadSelected(id?: string) {
@@ -118,6 +137,10 @@ async function loadSelected(id?: string) {
 }
 
 async function submit() {
+  if (!canEdit.value) {
+    message.info('请先登录后再编辑 Wiki');
+    return;
+  }
   try {
     if (selected.value) {
       await api.updateWikiPage(selected.value.id, form);

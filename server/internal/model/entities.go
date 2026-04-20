@@ -3,8 +3,11 @@ package model
 import "time"
 
 const (
-	RoleUser  = "user"
-	RoleAdmin = "admin"
+	RoleUser      = "user"
+	RoleDeveloper = "developer"
+	RoleOperator  = "operator"
+	RoleReviewer  = "reviewer"
+	RoleAdmin     = "admin"
 
 	StatusDraft     = "draft"
 	StatusPending   = "pending"
@@ -38,15 +41,61 @@ type Announcement struct {
 type HomeModuleSetting struct {
 	ID        uint   `gorm:"primaryKey"`
 	ModuleKey string `gorm:"size:64;uniqueIndex;not null"`
+	SortOrder int    `gorm:"not null;default:0"`
 	Enabled   bool   `gorm:"not null;default:true"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type HomeHighlight struct {
+	ID        uint   `gorm:"primaryKey"`
+	Text      string `gorm:"size:255;not null"`
+	SortOrder int    `gorm:"not null;default:0"`
+	Enabled   bool   `gorm:"not null;default:true"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type HomeHeroConfig struct {
+	ID              uint   `gorm:"primaryKey"`
+	Tagline         string `gorm:"size:120;not null"`
+	Title           string `gorm:"size:255;not null"`
+	Description     string `gorm:"size:1024;not null"`
+	PrimaryButton   string `gorm:"size:64;not null"`
+	SecondaryButton string `gorm:"size:64;not null"`
+	SearchButton    string `gorm:"size:64;not null"`
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type RankingConfig struct {
+	ID        uint   `gorm:"primaryKey"`
+	Title     string `gorm:"size:160;not null"`
+	Subtitle  string `gorm:"size:255"`
+	Limit     int    `gorm:"not null;default:5"`
+	Enabled   bool   `gorm:"not null;default:true"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type ScenePageConfig struct {
+	ID          uint   `gorm:"primaryKey"`
+	Slug        string `gorm:"size:64;uniqueIndex;not null"`
+	Name        string `gorm:"size:120;not null"`
+	Tagline     string `gorm:"size:120"`
+	Summary     string `gorm:"size:255;not null"`
+	Description string `gorm:"size:1024"`
+	SortOrder   int    `gorm:"not null;default:0"`
+	Enabled     bool   `gorm:"not null;default:true"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type FeaturedResource struct {
 	ID           uint   `gorm:"primaryKey"`
 	ResourceType string `gorm:"size:32;index;not null"`
 	ResourceID   uint   `gorm:"index;not null"`
+	BadgeLabel   string `gorm:"size:64"`
 	SortOrder    int    `gorm:"not null;default:0"`
 	Enabled      bool   `gorm:"not null;default:true"`
 	CreatedAt    time.Time
@@ -59,6 +108,7 @@ type ModelAsset struct {
 	Summary      string         `gorm:"size:255;not null"`
 	Description  string         `gorm:"type:text;not null"`
 	Tags         string         `gorm:"size:255"`
+	RecommendTag string         `gorm:"size:64"`
 	RobotType    string         `gorm:"size:128;index"`
 	InputSpec    string         `gorm:"size:255"`
 	OutputSpec   string         `gorm:"size:255"`
@@ -140,16 +190,22 @@ type DownloadPackageTask struct {
 }
 
 type DatasetAccessRequest struct {
-	ID            uint   `gorm:"primaryKey"`
-	DatasetID     uint   `gorm:"index;not null"`
-	UserID        uint   `gorm:"index;not null"`
-	Reason        string `gorm:"type:text;not null"`
-	Status        string `gorm:"size:32;index;not null;default:pending"`
-	ReviewComment string `gorm:"size:512"`
-	ReviewedBy    *uint  `gorm:"index"`
-	ReviewedAt    *time.Time
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                uint   `gorm:"primaryKey"`
+	DatasetID         uint   `gorm:"index;not null"`
+	UserID            uint   `gorm:"index;not null"`
+	Reason            string `gorm:"type:text;not null"`
+	Status            string `gorm:"size:32;index;not null;default:pending"`
+	ReviewComment     string `gorm:"size:512"`
+	ApprovalStage     int    `gorm:"not null;default:0"`
+	RequiredApprovals int    `gorm:"not null;default:1"`
+	ApproverIDs       string `gorm:"size:255"`
+	ApprovalExpiresAt *time.Time
+	DownloadLimit     int   `gorm:"not null;default:0"`
+	DownloadCount     int   `gorm:"not null;default:0"`
+	ReviewedBy        *uint `gorm:"index"`
+	ReviewedAt        *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type TaskTemplate struct {
@@ -259,12 +315,26 @@ type DownloadRecord struct {
 	CreatedAt     time.Time
 }
 
+type FileObject struct {
+	ID            uint   `gorm:"primaryKey"`
+	ObjectKey     string `gorm:"size:255;uniqueIndex;not null"`
+	OriginalName  string `gorm:"size:255;not null"`
+	MIMEType      string `gorm:"size:128"`
+	SizeBytes     int64  `gorm:"not null;default:0"`
+	StorageDriver string `gorm:"size:32;not null;default:local"`
+	Scope         string `gorm:"size:64;index"`
+	UploadedBy    uint   `gorm:"index"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 type Notification struct {
 	ID        uint   `gorm:"primaryKey"`
 	UserID    uint   `gorm:"index;not null"`
 	Type      string `gorm:"size:64;not null"`
 	Title     string `gorm:"size:160;not null"`
 	Content   string `gorm:"type:text;not null"`
+	Link      string `gorm:"size:255"`
 	Read      bool   `gorm:"index;not null;default:false"`
 	CreatedAt time.Time
 }
@@ -375,6 +445,26 @@ type SearchRecord struct {
 	CreatedAt  time.Time
 }
 
+type SearchKeywordConfig struct {
+	ID          uint   `gorm:"primaryKey"`
+	Query       string `gorm:"size:160;index;not null"`
+	KeywordType string `gorm:"size:32;index;not null"`
+	SortOrder   int    `gorm:"not null;default:0"`
+	Enabled     bool   `gorm:"not null;default:true"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type FilterOptionConfig struct {
+	ID        uint   `gorm:"primaryKey"`
+	Kind      string `gorm:"size:64;index;not null"`
+	Value     string `gorm:"size:160;index;not null"`
+	SortOrder int    `gorm:"not null;default:0"`
+	Enabled   bool   `gorm:"not null;default:true"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type DeveloperVerification struct {
 	ID               uint   `gorm:"primaryKey"`
 	UserID           uint   `gorm:"index;not null"`
@@ -475,13 +565,17 @@ type WebhookDelivery struct {
 }
 
 type Conversation struct {
-	ID          uint   `gorm:"primaryKey"`
-	Kind        string `gorm:"size:32;index;not null"`
-	Key         string `gorm:"size:160;uniqueIndex;not null"`
-	WorkspaceID *uint  `gorm:"index"`
-	Title       string `gorm:"size:160"`
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID            uint   `gorm:"primaryKey"`
+	Kind          string `gorm:"size:32;index;not null"`
+	Key           string `gorm:"size:160;uniqueIndex;not null"`
+	WorkspaceID   *uint  `gorm:"index"`
+	Title         string `gorm:"size:160"`
+	Active        bool   `gorm:"index;not null;default:true"`
+	BlockedReason string `gorm:"size:512"`
+	BlockedBy     *uint  `gorm:"index"`
+	BlockedAt     *time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 type ConversationParticipant struct {
@@ -505,6 +599,10 @@ type Workspace struct {
 	Summary        string `gorm:"size:255;not null"`
 	OwnerID        uint   `gorm:"index;not null"`
 	ConversationID uint   `gorm:"index;not null"`
+	Active         bool   `gorm:"index;not null;default:true"`
+	BlockedReason  string `gorm:"size:512"`
+	BlockedBy      *uint  `gorm:"index"`
+	BlockedAt      *time.Time
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

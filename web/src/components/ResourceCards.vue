@@ -7,6 +7,7 @@
           <p class="card-summary">{{ item.summary }}</p>
         </div>
         <a-space direction="vertical" align="end" :size="8">
+          <a-tag v-if="item.badge_label" color="orange">{{ item.badge_label }}</a-tag>
           <a-tag color="blue">{{ typeLabel(item.type) }}</a-tag>
           <a-tag v-if="item.status" :color="statusColor(item.status)">{{ statusLabel(item.status) }}</a-tag>
         </a-space>
@@ -24,6 +25,7 @@
 
       <template #actions>
         <RouterLink :to="detailRoute(item)">查看详情</RouterLink>
+        <RouterLink v-if="props.editable" :to="editRoute(item)">编辑资源</RouterLink>
       </template>
     </a-card>
   </div>
@@ -34,8 +36,9 @@ import { RouterLink } from 'vue-router';
 
 import type { ResourceCard } from '@/types/api';
 
-defineProps<{
+const props = defineProps<{
   items: ResourceCard[];
+  editable?: boolean;
 }>();
 
 function typeLabel(type: string) {
@@ -66,6 +69,10 @@ function detailRoute(item: ResourceCard) {
   return item.type === 'dataset' ? `/datasets/${item.id}` : `/models/${item.id}`;
 }
 
+function editRoute(item: ResourceCard) {
+  return item.type === 'dataset' ? `/datasets/${item.id}/edit` : `/models/${item.id}/edit`;
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString();
 }
@@ -73,9 +80,18 @@ function formatDate(value: string) {
 
 <style scoped>
 .resource-card {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
   border-radius: 22px;
   background: linear-gradient(180deg, #ffffff, #f8fbff);
   box-shadow: var(--shadow);
+}
+
+.resource-card :deep(.ant-card-body) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
 }
 
 .card-top {
@@ -97,6 +113,7 @@ function formatDate(value: string) {
 }
 
 .card-foot {
+  margin-top: auto;
   display: flex;
   justify-content: space-between;
   color: var(--text-secondary);

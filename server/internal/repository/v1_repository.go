@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -124,9 +125,14 @@ func (r *CommunityRepository) GetDiscussion(id uint) (*model.Discussion, error) 
 	return &item, err
 }
 
-func (r *CommunityRepository) ListDiscussions() ([]model.Discussion, error) {
+func (r *CommunityRepository) ListDiscussions(query, tag string) ([]model.Discussion, error) {
+	db := r.db.Model(&model.Discussion{})
+	db = applyTextSearch(db, query, []string{"title", "summary", "content", "category"})
+	if trimmedTag := strings.TrimSpace(tag); trimmedTag != "" {
+		db = db.Where("category = ?", trimmedTag)
+	}
 	var items []model.Discussion
-	err := r.db.Preload("User").Order("updated_at desc").Find(&items).Error
+	err := db.Preload("User").Order("updated_at desc").Find(&items).Error
 	return items, err
 }
 
@@ -209,6 +215,37 @@ func (r *CommunityRepository) HotQueries(limit int) ([]HotQuery, error) {
 		Limit(limit).
 		Scan(&rows).Error
 	return rows, err
+}
+
+func (r *CommunityRepository) ListSearchKeywordConfigs(keywordType string, enabledOnly bool) ([]model.SearchKeywordConfig, error) {
+	var items []model.SearchKeywordConfig
+	db := r.db.Model(&model.SearchKeywordConfig{})
+	if keywordType != "" {
+		db = db.Where("keyword_type = ?", keywordType)
+	}
+	if enabledOnly {
+		db = db.Where("enabled = ?", true)
+	}
+	err := db.Order("sort_order asc, updated_at desc").Find(&items).Error
+	return items, err
+}
+
+func (r *CommunityRepository) GetSearchKeywordConfig(id uint) (*model.SearchKeywordConfig, error) {
+	var item model.SearchKeywordConfig
+	err := r.db.First(&item, id).Error
+	return &item, err
+}
+
+func (r *CommunityRepository) CreateSearchKeywordConfig(item *model.SearchKeywordConfig) error {
+	return r.db.Create(item).Error
+}
+
+func (r *CommunityRepository) UpdateSearchKeywordConfig(item *model.SearchKeywordConfig) error {
+	return r.db.Save(item).Error
+}
+
+func (r *CommunityRepository) DeleteSearchKeywordConfig(id uint) error {
+	return r.db.Delete(&model.SearchKeywordConfig{}, id).Error
 }
 
 func (r *CommunityRepository) CountComments(resourceType string, resourceID uint) (int64, error) {

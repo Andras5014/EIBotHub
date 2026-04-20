@@ -10,6 +10,7 @@ import (
 
 	"github.com/Andras5014/EIBotHub/server/internal/dto"
 	"github.com/Andras5014/EIBotHub/server/internal/middleware"
+	"github.com/Andras5014/EIBotHub/server/internal/model"
 	"github.com/Andras5014/EIBotHub/server/internal/service"
 	"github.com/Andras5014/EIBotHub/server/internal/support"
 )
@@ -29,7 +30,8 @@ type Handler struct {
 	rewards       *service.RewardService
 	integrations  *service.IntegrationService
 	collaboration *service.CollaborationService
-	storage       *support.LocalStorage
+	files         *service.FileService
+	storage       support.ObjectStorage
 	tokens        *support.TokenManager
 }
 
@@ -51,6 +53,24 @@ var (
 	searchLabels = map[string]string{
 		"Q": "关键词",
 	}
+	searchKeywordLabels = map[string]string{
+		"Query":       "关键词",
+		"KeywordType": "运营词类型",
+		"SortOrder":   "排序值",
+	}
+	filterOptionLabels = map[string]string{
+		"Kind":      "字典类型",
+		"Value":     "展示值",
+		"SortOrder": "排序值",
+	}
+	modelRecommendTagLabels = map[string]string{
+		"RecommendTag": "模型推荐标签",
+	}
+	batchDatasetAccessDecisionLabels = map[string]string{
+		"IDs":      "申请列表",
+		"Decision": "审核决定",
+		"Comment":  "审核说明",
+	}
 	modelLabels = map[string]string{
 		"Name":         "模型名称",
 		"Summary":      "摘要",
@@ -63,6 +83,17 @@ var (
 		"Dependencies": "依赖",
 		"Version":      "版本",
 		"Changelog":    "版本说明",
+	}
+	modelUpdateLabels = map[string]string{
+		"Name":         "模型名称",
+		"Summary":      "摘要",
+		"Description":  "描述",
+		"Tags":         "标签",
+		"RobotType":    "机器人类型",
+		"InputSpec":    "输入规格",
+		"OutputSpec":   "输出规格",
+		"License":      "许可证",
+		"Dependencies": "依赖",
 	}
 	modelVersionLabels = map[string]string{
 		"Version":   "版本",
@@ -82,6 +113,18 @@ var (
 		"Changelog":     "版本说明",
 		"SamplePreview": "样本预览",
 	}
+	datasetUpdateLabels = map[string]string{
+		"Name":          "数据集名称",
+		"Summary":       "摘要",
+		"Description":   "描述",
+		"Tags":          "标签",
+		"SampleCount":   "样本量",
+		"Device":        "采集设备",
+		"Scene":         "场景",
+		"Privacy":       "权限等级",
+		"AgreementText": "协议文本",
+		"SamplePreview": "样本预览",
+	}
 	favoriteLabels = map[string]string{
 		"ResourceType": "资源类型",
 		"ResourceID":   "资源ID",
@@ -97,11 +140,38 @@ var (
 		"Link":    "链接",
 	}
 	moduleSettingLabels = map[string]string{
-		"Enabled": "启用状态",
+		"Enabled":   "启用状态",
+		"SortOrder": "排序值",
+	}
+	homeHighlightLabels = map[string]string{
+		"Text":      "亮点文案",
+		"SortOrder": "排序值",
+	}
+	homeHeroLabels = map[string]string{
+		"Tagline":         "导读标签",
+		"Title":           "主标题",
+		"Description":     "导读说明",
+		"PrimaryButton":   "主按钮文案",
+		"SecondaryButton": "次按钮文案",
+		"SearchButton":    "搜索按钮文案",
+	}
+	rankingConfigLabels = map[string]string{
+		"Title":    "榜单标题",
+		"Subtitle": "榜单副标题",
+		"Limit":    "展示数量",
+	}
+	scenePageLabels = map[string]string{
+		"Slug":        "场景标识",
+		"Name":        "场景名称",
+		"Tagline":     "场景标签",
+		"Summary":     "场景摘要",
+		"Description": "场景说明",
+		"SortOrder":   "排序值",
 	}
 	featuredResourceLabels = map[string]string{
 		"ResourceType": "资源类型",
 		"ResourceID":   "资源",
+		"BadgeLabel":   "推荐标签",
 		"SortOrder":    "排序",
 	}
 	templateAdminLabels = map[string]string{
@@ -179,10 +249,9 @@ var (
 		"ResourceRef": "关联资源",
 	}
 	discussionLabels = map[string]string{
-		"Title":    "标题",
-		"Summary":  "摘要",
-		"Content":  "内容",
-		"Category": "分类",
+		"Title":   "标题",
+		"Tag":     "标签",
+		"Content": "正文",
 	}
 	verificationLabels = map[string]string{
 		"VerificationType": "认证类型",
@@ -234,7 +303,7 @@ var (
 	}
 )
 
-func New(auth *service.AuthService, portal *service.PortalService, models *service.ModelService, datasets *service.DatasetService, catalog *service.CatalogService, users *service.UserService, search *service.SearchService, admin *service.AdminService, community *service.CommunityService, verification *service.VerificationService, wiki *service.WikiService, rewards *service.RewardService, integrations *service.IntegrationService, collaboration *service.CollaborationService, storage *support.LocalStorage, tokens *support.TokenManager) *Handler {
+func New(auth *service.AuthService, portal *service.PortalService, models *service.ModelService, datasets *service.DatasetService, catalog *service.CatalogService, users *service.UserService, search *service.SearchService, admin *service.AdminService, community *service.CommunityService, verification *service.VerificationService, wiki *service.WikiService, rewards *service.RewardService, integrations *service.IntegrationService, collaboration *service.CollaborationService, files *service.FileService, storage support.ObjectStorage, tokens *support.TokenManager) *Handler {
 	return &Handler{
 		auth:          auth,
 		portal:        portal,
@@ -250,6 +319,7 @@ func New(auth *service.AuthService, portal *service.PortalService, models *servi
 		rewards:       rewards,
 		integrations:  integrations,
 		collaboration: collaboration,
+		files:         files,
 		storage:       storage,
 		tokens:        tokens,
 	}
@@ -257,13 +327,16 @@ func New(auth *service.AuthService, portal *service.PortalService, models *servi
 
 func (h *Handler) Register(router *gin.Engine) {
 	router.Use(gin.Recovery(), middleware.CORS())
-	router.Static("/storage", "./storage")
 
 	api := router.Group("/api/v1")
 	{
+		api.GET("/files/download/:token", h.downloadFileByToken)
 		api.GET("/portal/home", h.getHome)
+		api.GET("/scenes", h.listScenePages)
+		api.GET("/scenes/:slug", h.scenePageDetail)
 		api.GET("/search", h.searchAll)
 		api.GET("/search/hot", h.hotQueries)
+		api.GET("/search/recommended", h.recommendedQueries)
 		api.POST("/auth/register", h.register)
 		api.POST("/auth/login", h.login)
 
@@ -273,6 +346,7 @@ func (h *Handler) Register(router *gin.Engine) {
 		api.GET("/models/:id/ratings", h.getModelRatings)
 		api.GET("/models/:id/comments", h.getModelComments)
 		api.GET("/datasets/options", h.datasetOptions)
+		api.GET("/filter-options", h.filterOptions)
 		api.GET("/datasets", h.listDatasets)
 		api.GET("/datasets/:id", h.datasetDetail)
 		api.GET("/datasets/:id/samples", h.datasetSamples)
@@ -327,6 +401,7 @@ func (h *Handler) Register(router *gin.Engine) {
 			secured.POST("/webhooks/:id/test", h.testWebhook)
 			secured.PUT("/users/me/profile", h.updateProfile)
 			secured.GET("/users/me/uploads", h.myUploads)
+			secured.GET("/users/me/dataset-access-requests", h.myDatasetAccessRequests)
 			secured.GET("/users/me/favorites", h.myFavorites)
 			secured.POST("/favorites/toggle", h.toggleFavorite)
 			secured.GET("/users/me/downloads", h.myDownloads)
@@ -334,6 +409,7 @@ func (h *Handler) Register(router *gin.Engine) {
 			secured.POST("/users/me/notifications/read", h.readNotifications)
 
 			secured.POST("/models", h.createModel)
+			secured.PUT("/models/:id", h.updateModel)
 			secured.POST("/models/:id/versions", h.addModelVersion)
 			secured.POST("/models/:id/submit", h.submitModel)
 			secured.POST("/models/:id/download", h.downloadModel)
@@ -342,6 +418,7 @@ func (h *Handler) Register(router *gin.Engine) {
 			secured.POST("/models/:id/comments", h.commentModel)
 
 			secured.POST("/datasets", h.createDataset)
+			secured.PUT("/datasets/:id", h.updateDataset)
 			secured.POST("/datasets/:id/versions", h.addDatasetVersion)
 			secured.POST("/datasets/:id/submit", h.submitDataset)
 			secured.POST("/datasets/:id/agreements/confirm", h.confirmDatasetAgreement)
@@ -349,6 +426,7 @@ func (h *Handler) Register(router *gin.Engine) {
 			secured.GET("/datasets/:id/download-packages", h.listDatasetDownloadPackages)
 			secured.POST("/datasets/:id/download-packages", h.createDatasetDownloadPackage)
 			secured.GET("/datasets/:id/access-requests/me", h.myDatasetAccessRequest)
+			secured.GET("/datasets/:id/access-requests/history", h.myDatasetAccessHistory)
 			secured.POST("/datasets/:id/access-requests", h.createDatasetAccessRequest)
 			secured.POST("/datasets/:id/ratings", h.rateDataset)
 			secured.POST("/datasets/:id/comments", h.commentDataset)
@@ -379,80 +457,234 @@ func (h *Handler) Register(router *gin.Engine) {
 		}
 
 		adminGroup := api.Group("/admin")
-		adminGroup.Use(middleware.AdminRequired(h.tokens))
+		adminGroup.Use(middleware.AuthRequired(h.tokens))
 		{
-			adminGroup.GET("/dashboard", h.adminDashboard)
-			adminGroup.GET("/reviews", h.adminReviews)
-			adminGroup.POST("/reviews/:type/:id/decision", h.adminReviewDecision)
-			adminGroup.GET("/datasets/access-requests", h.adminDatasetAccessRequests)
-			adminGroup.POST("/datasets/access-requests/:id/decision", h.adminReviewDatasetAccessRequest)
-			adminGroup.GET("/announcements", h.adminAnnouncements)
-			adminGroup.POST("/announcements", h.adminCreateAnnouncement)
-			adminGroup.GET("/portal/modules", h.adminPortalModules)
-			adminGroup.PUT("/portal/modules/:key", h.adminUpdatePortalModule)
-			adminGroup.GET("/portal/featured-resources", h.adminFeaturedResources)
-			adminGroup.POST("/portal/featured-resources", h.adminCreateFeaturedResource)
-			adminGroup.PUT("/portal/featured-resources/:id", h.adminUpdateFeaturedResource)
-			adminGroup.DELETE("/portal/featured-resources/:id", h.adminDeleteFeaturedResource)
-			adminGroup.GET("/content/templates", h.adminTemplates)
-			adminGroup.POST("/content/templates", h.adminCreateTemplate)
-			adminGroup.PUT("/content/templates/:id", h.adminUpdateTemplate)
-			adminGroup.DELETE("/content/templates/:id", h.adminDeleteTemplate)
-			adminGroup.POST("/content/templates/status", h.adminBatchTemplateStatus)
-			adminGroup.POST("/content/templates/delete", h.adminBatchDeleteTemplates)
-			adminGroup.GET("/content/application-cases", h.adminApplicationCases)
-			adminGroup.POST("/content/application-cases", h.adminCreateApplicationCase)
-			adminGroup.PUT("/content/application-cases/:id", h.adminUpdateApplicationCase)
-			adminGroup.DELETE("/content/application-cases/:id", h.adminDeleteApplicationCase)
-			adminGroup.POST("/content/application-cases/status", h.adminBatchApplicationCaseStatus)
-			adminGroup.POST("/content/application-cases/delete", h.adminBatchDeleteApplicationCases)
-			adminGroup.GET("/content/doc-categories", h.adminDocCategories)
-			adminGroup.POST("/content/doc-categories", h.adminCreateDocCategory)
-			adminGroup.PUT("/content/doc-categories/:id", h.adminUpdateDocCategory)
-			adminGroup.DELETE("/content/doc-categories/:id", h.adminDeleteDocCategory)
-			adminGroup.GET("/content/docs", h.adminDocuments)
-			adminGroup.POST("/content/docs", h.adminCreateDocument)
-			adminGroup.PUT("/content/docs/:id", h.adminUpdateDocument)
-			adminGroup.DELETE("/content/docs/:id", h.adminDeleteDocument)
-			adminGroup.POST("/content/docs/status", h.adminBatchDocumentStatus)
-			adminGroup.POST("/content/docs/delete", h.adminBatchDeleteDocuments)
-			adminGroup.GET("/content/faqs", h.adminFAQs)
-			adminGroup.POST("/content/faqs", h.adminCreateFAQ)
-			adminGroup.PUT("/content/faqs/:id", h.adminUpdateFAQ)
-			adminGroup.DELETE("/content/faqs/:id", h.adminDeleteFAQ)
-			adminGroup.GET("/content/videos", h.adminVideos)
-			adminGroup.POST("/content/videos", h.adminCreateVideo)
-			adminGroup.PUT("/content/videos/:id", h.adminUpdateVideo)
-			adminGroup.DELETE("/content/videos/:id", h.adminDeleteVideo)
-			adminGroup.POST("/content/videos/status", h.adminBatchVideoStatus)
-			adminGroup.POST("/content/videos/delete", h.adminBatchDeleteVideos)
-			adminGroup.GET("/content/agreement-templates", h.adminAgreementTemplates)
-			adminGroup.POST("/content/agreement-templates", h.adminCreateAgreementTemplate)
-			adminGroup.PUT("/content/agreement-templates/:id", h.adminUpdateAgreementTemplate)
-			adminGroup.DELETE("/content/agreement-templates/:id", h.adminDeleteAgreementTemplate)
-			adminGroup.GET("/content/privacy-options", h.adminPrivacyOptions)
-			adminGroup.POST("/content/privacy-options", h.adminCreatePrivacyOption)
-			adminGroup.PUT("/content/privacy-options/:id", h.adminUpdatePrivacyOption)
-			adminGroup.DELETE("/content/privacy-options/:id", h.adminDeletePrivacyOption)
-			adminGroup.GET("/operations", h.adminOperationLogs)
-			adminGroup.GET("/community/overview", h.adminCommunityOverview)
-			adminGroup.GET("/community/skills", h.adminCommunitySkills)
-			adminGroup.POST("/community/skills/:id/hide", h.adminHideSkill)
-			adminGroup.GET("/community/discussions", h.adminCommunityDiscussions)
-			adminGroup.POST("/community/discussions/:id/remove", h.adminDeleteDiscussion)
-			adminGroup.GET("/community/comments", h.adminCommunityComments)
-			adminGroup.POST("/community/comments/:id/remove", h.adminDeleteComment)
-			adminGroup.GET("/verifications", h.adminVerifications)
-			adminGroup.POST("/verifications/:id/decision", h.adminReviewVerification)
-			adminGroup.GET("/wiki/pages", h.adminWikiPages)
-			adminGroup.POST("/wiki/pages/:id/lock", h.adminLockWikiPage)
-			adminGroup.POST("/wiki/pages/:id/unlock", h.adminUnlockWikiPage)
-			adminGroup.POST("/wiki/pages/:id/rollback", h.adminRollbackWikiPage)
-			adminGroup.GET("/rewards/overview", h.adminRewardOverview)
-			adminGroup.GET("/rewards/benefits", h.adminRewardBenefits)
-			adminGroup.PUT("/rewards/benefits/:id", h.adminUpdateRewardBenefit)
-			adminGroup.GET("/rewards/adjustments", h.adminRewardAdjustments)
-			adminGroup.POST("/rewards/adjustments", h.adminAdjustRewardPoints)
+			dashboardGroup := adminGroup.Group("/")
+			dashboardGroup.Use(middleware.PermissionRequired(model.PermissionDashboardView))
+			{
+				dashboardGroup.GET("/dashboard", h.adminDashboard)
+			}
+
+			operationGroup := adminGroup.Group("/")
+			operationGroup.Use(middleware.PermissionRequired(model.PermissionOperationLogView))
+			{
+				operationGroup.GET("/operations", h.adminOperationLogs)
+			}
+
+			reviewGroup := adminGroup.Group("/")
+			reviewGroup.Use(middleware.PermissionRequired(model.PermissionReviewManage))
+			{
+				reviewGroup.GET("/reviews", h.adminReviews)
+				reviewGroup.POST("/reviews/:type/:id/decision", h.adminReviewDecision)
+			}
+
+			datasetAccessGroup := adminGroup.Group("/")
+			datasetAccessGroup.Use(middleware.PermissionRequired(model.PermissionDatasetAccessReview))
+			{
+				datasetAccessGroup.GET("/datasets/access-requests", h.adminDatasetAccessRequests)
+				datasetAccessGroup.POST("/datasets/access-requests/batch-decision", h.adminBatchReviewDatasetAccessRequests)
+				datasetAccessGroup.POST("/datasets/access-requests/:id/decision", h.adminReviewDatasetAccessRequest)
+			}
+
+			verificationGroup := adminGroup.Group("/")
+			verificationGroup.Use(middleware.PermissionRequired(model.PermissionVerificationReview))
+			{
+				verificationGroup.GET("/verifications", h.adminVerifications)
+				verificationGroup.POST("/verifications/:id/decision", h.adminReviewVerification)
+			}
+
+			announcementGroup := adminGroup.Group("/")
+			announcementGroup.Use(middleware.PermissionRequired(model.PermissionAnnouncementManage))
+			{
+				announcementGroup.GET("/announcements", h.adminAnnouncements)
+				announcementGroup.POST("/announcements", h.adminCreateAnnouncement)
+			}
+
+			portalGroup := adminGroup.Group("/")
+			portalGroup.Use(middleware.PermissionRequired(model.PermissionPortalManage))
+			{
+				portalGroup.GET("/portal/modules", h.adminPortalModules)
+				portalGroup.PUT("/portal/modules/:key", h.adminUpdatePortalModule)
+				portalGroup.GET("/portal/hero-config", h.adminHomeHeroConfig)
+				portalGroup.PUT("/portal/hero-config", h.adminUpdateHomeHeroConfig)
+				portalGroup.GET("/portal/highlights", h.adminHomeHighlights)
+				portalGroup.POST("/portal/highlights", h.adminCreateHomeHighlight)
+				portalGroup.PUT("/portal/highlights/:id", h.adminUpdateHomeHighlight)
+				portalGroup.DELETE("/portal/highlights/:id", h.adminDeleteHomeHighlight)
+				portalGroup.GET("/portal/scenes", h.adminScenePages)
+				portalGroup.POST("/portal/scenes", h.adminCreateScenePage)
+				portalGroup.PUT("/portal/scenes/:id", h.adminUpdateScenePage)
+				portalGroup.DELETE("/portal/scenes/:id", h.adminDeleteScenePage)
+				portalGroup.GET("/portal/rankings-config", h.adminRankingConfig)
+				portalGroup.PUT("/portal/rankings-config", h.adminUpdateRankingConfig)
+			}
+
+			searchKeywordGroup := adminGroup.Group("/")
+			searchKeywordGroup.Use(middleware.PermissionRequired(model.PermissionSearchKeywordManage))
+			{
+				searchKeywordGroup.GET("/portal/search-keywords", h.adminSearchKeywords)
+				searchKeywordGroup.POST("/portal/search-keywords", h.adminCreateSearchKeyword)
+				searchKeywordGroup.PUT("/portal/search-keywords/:id", h.adminUpdateSearchKeyword)
+				searchKeywordGroup.DELETE("/portal/search-keywords/:id", h.adminDeleteSearchKeyword)
+			}
+
+			featuredGroup := adminGroup.Group("/")
+			featuredGroup.Use(middleware.PermissionRequired(model.PermissionFeaturedResourceManage))
+			{
+				featuredGroup.GET("/portal/featured-resources", h.adminFeaturedResources)
+				featuredGroup.POST("/portal/featured-resources", h.adminCreateFeaturedResource)
+				featuredGroup.PUT("/portal/featured-resources/:id", h.adminUpdateFeaturedResource)
+				featuredGroup.DELETE("/portal/featured-resources/:id", h.adminDeleteFeaturedResource)
+			}
+
+			templateGroup := adminGroup.Group("/")
+			templateGroup.Use(middleware.PermissionRequired(model.PermissionTemplateManage))
+			{
+				templateGroup.GET("/content/templates", h.adminTemplates)
+				templateGroup.POST("/content/templates", h.adminCreateTemplate)
+				templateGroup.PUT("/content/templates/:id", h.adminUpdateTemplate)
+				templateGroup.DELETE("/content/templates/:id", h.adminDeleteTemplate)
+				templateGroup.POST("/content/templates/status", h.adminBatchTemplateStatus)
+				templateGroup.POST("/content/templates/delete", h.adminBatchDeleteTemplates)
+			}
+
+			caseGroup := adminGroup.Group("/")
+			caseGroup.Use(middleware.PermissionRequired(model.PermissionApplicationCaseManage))
+			{
+				caseGroup.GET("/content/application-cases", h.adminApplicationCases)
+				caseGroup.POST("/content/application-cases", h.adminCreateApplicationCase)
+				caseGroup.PUT("/content/application-cases/:id", h.adminUpdateApplicationCase)
+				caseGroup.DELETE("/content/application-cases/:id", h.adminDeleteApplicationCase)
+				caseGroup.POST("/content/application-cases/status", h.adminBatchApplicationCaseStatus)
+				caseGroup.POST("/content/application-cases/delete", h.adminBatchDeleteApplicationCases)
+			}
+
+			docCategoryGroup := adminGroup.Group("/")
+			docCategoryGroup.Use(middleware.PermissionRequired(model.PermissionDocumentCategoryManage))
+			{
+				docCategoryGroup.GET("/content/doc-categories", h.adminDocCategories)
+				docCategoryGroup.POST("/content/doc-categories", h.adminCreateDocCategory)
+				docCategoryGroup.PUT("/content/doc-categories/:id", h.adminUpdateDocCategory)
+				docCategoryGroup.DELETE("/content/doc-categories/:id", h.adminDeleteDocCategory)
+			}
+
+			documentGroup := adminGroup.Group("/")
+			documentGroup.Use(middleware.PermissionRequired(model.PermissionDocumentManage))
+			{
+				documentGroup.GET("/content/docs", h.adminDocuments)
+				documentGroup.POST("/content/docs", h.adminCreateDocument)
+				documentGroup.PUT("/content/docs/:id", h.adminUpdateDocument)
+				documentGroup.DELETE("/content/docs/:id", h.adminDeleteDocument)
+				documentGroup.POST("/content/docs/status", h.adminBatchDocumentStatus)
+				documentGroup.POST("/content/docs/delete", h.adminBatchDeleteDocuments)
+			}
+
+			faqGroup := adminGroup.Group("/")
+			faqGroup.Use(middleware.PermissionRequired(model.PermissionFAQManage))
+			{
+				faqGroup.GET("/content/faqs", h.adminFAQs)
+				faqGroup.POST("/content/faqs", h.adminCreateFAQ)
+				faqGroup.PUT("/content/faqs/:id", h.adminUpdateFAQ)
+				faqGroup.DELETE("/content/faqs/:id", h.adminDeleteFAQ)
+			}
+
+			videoGroup := adminGroup.Group("/")
+			videoGroup.Use(middleware.PermissionRequired(model.PermissionVideoManage))
+			{
+				videoGroup.GET("/content/videos", h.adminVideos)
+				videoGroup.POST("/content/videos", h.adminCreateVideo)
+				videoGroup.PUT("/content/videos/:id", h.adminUpdateVideo)
+				videoGroup.DELETE("/content/videos/:id", h.adminDeleteVideo)
+				videoGroup.POST("/content/videos/status", h.adminBatchVideoStatus)
+				videoGroup.POST("/content/videos/delete", h.adminBatchDeleteVideos)
+			}
+
+			agreementGroup := adminGroup.Group("/")
+			agreementGroup.Use(middleware.PermissionRequired(model.PermissionAgreementManage))
+			{
+				agreementGroup.GET("/content/agreement-templates", h.adminAgreementTemplates)
+				agreementGroup.POST("/content/agreement-templates", h.adminCreateAgreementTemplate)
+				agreementGroup.PUT("/content/agreement-templates/:id", h.adminUpdateAgreementTemplate)
+				agreementGroup.DELETE("/content/agreement-templates/:id", h.adminDeleteAgreementTemplate)
+			}
+
+			privacyGroup := adminGroup.Group("/")
+			privacyGroup.Use(middleware.PermissionRequired(model.PermissionPrivacyManage))
+			{
+				privacyGroup.GET("/content/privacy-options", h.adminPrivacyOptions)
+				privacyGroup.POST("/content/privacy-options", h.adminCreatePrivacyOption)
+				privacyGroup.PUT("/content/privacy-options/:id", h.adminUpdatePrivacyOption)
+				privacyGroup.DELETE("/content/privacy-options/:id", h.adminDeletePrivacyOption)
+			}
+
+			filterOptionGroup := adminGroup.Group("/")
+			filterOptionGroup.Use(middleware.PermissionRequired(model.PermissionFilterOptionManage))
+			{
+				filterOptionGroup.GET("/content/filter-options", h.adminFilterOptions)
+				filterOptionGroup.POST("/content/filter-options", h.adminCreateFilterOption)
+				filterOptionGroup.PUT("/content/filter-options/:id", h.adminUpdateFilterOption)
+				filterOptionGroup.DELETE("/content/filter-options/:id", h.adminDeleteFilterOption)
+			}
+
+			modelRecommendTagGroup := adminGroup.Group("/")
+			modelRecommendTagGroup.Use(middleware.PermissionRequired(model.PermissionModelRecommendTagManage))
+			{
+				modelRecommendTagGroup.GET("/content/model-recommend-tags", h.adminModelRecommendTags)
+				modelRecommendTagGroup.PUT("/content/model-recommend-tags/:id", h.adminUpdateModelRecommendTag)
+			}
+
+			communityOverviewGroup := adminGroup.Group("/")
+			communityOverviewGroup.Use(middleware.PermissionRequired(model.PermissionCommunityAccess))
+			{
+				communityOverviewGroup.GET("/community/overview", h.adminCommunityOverview)
+			}
+
+			communityContentGroup := adminGroup.Group("/")
+			communityContentGroup.Use(middleware.PermissionRequired(model.PermissionCommunityContentModerate))
+			{
+				communityContentGroup.GET("/community/skills", h.adminCommunitySkills)
+				communityContentGroup.POST("/community/skills/:id/hide", h.adminHideSkill)
+				communityContentGroup.GET("/community/discussions", h.adminCommunityDiscussions)
+				communityContentGroup.POST("/community/discussions/:id/remove", h.adminDeleteDiscussion)
+				communityContentGroup.GET("/community/comments", h.adminCommunityComments)
+				communityContentGroup.POST("/community/comments/:id/remove", h.adminDeleteComment)
+			}
+
+			conversationModerationGroup := adminGroup.Group("/")
+			conversationModerationGroup.Use(middleware.PermissionRequired(model.PermissionConversationModerate))
+			{
+				conversationModerationGroup.GET("/community/conversations", h.adminConversations)
+				conversationModerationGroup.POST("/community/conversations/:id/block", h.adminBlockConversation)
+				conversationModerationGroup.POST("/community/conversations/:id/unblock", h.adminUnblockConversation)
+			}
+
+			workspaceModerationGroup := adminGroup.Group("/")
+			workspaceModerationGroup.Use(middleware.PermissionRequired(model.PermissionWorkspaceModerate))
+			{
+				workspaceModerationGroup.GET("/community/workspaces", h.adminWorkspaces)
+				workspaceModerationGroup.POST("/community/workspaces/:id/block", h.adminBlockWorkspace)
+				workspaceModerationGroup.POST("/community/workspaces/:id/unblock", h.adminUnblockWorkspace)
+				workspaceModerationGroup.POST("/community/workspaces/:id/remove-member", h.adminRemoveWorkspaceMember)
+			}
+
+			wikiAdminGroup := adminGroup.Group("/")
+			wikiAdminGroup.Use(middleware.PermissionRequired(model.PermissionWikiManage))
+			{
+				wikiAdminGroup.GET("/wiki/pages", h.adminWikiPages)
+				wikiAdminGroup.POST("/wiki/pages/:id/lock", h.adminLockWikiPage)
+				wikiAdminGroup.POST("/wiki/pages/:id/unlock", h.adminUnlockWikiPage)
+				wikiAdminGroup.POST("/wiki/pages/:id/rollback", h.adminRollbackWikiPage)
+			}
+
+			rewardGroup := adminGroup.Group("/")
+			rewardGroup.Use(middleware.PermissionRequired(model.PermissionRewardManage))
+			{
+				rewardGroup.GET("/rewards/overview", h.adminRewardOverview)
+				rewardGroup.GET("/rewards/benefits", h.adminRewardBenefits)
+				rewardGroup.PUT("/rewards/benefits/:id", h.adminUpdateRewardBenefit)
+				rewardGroup.GET("/rewards/adjustments", h.adminRewardAdjustments)
+				rewardGroup.POST("/rewards/adjustments", h.adminAdjustRewardPoints)
+			}
 		}
 	}
 }
@@ -618,6 +850,32 @@ func (h *Handler) createModel(c *gin.Context) {
 	support.RespondCreated(c, data)
 }
 
+func (h *Handler) updateModel(c *gin.Context) {
+	claims := middleware.MustClaims(c)
+	var input dto.ModelUpdateRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, modelUpdateLabels)))
+		return
+	}
+
+	data, err := h.models.Update(parseUintParam(c, "id"), claims.UserID, service.ModelUpdateInput{
+		Name:         input.Name,
+		Summary:      input.Summary,
+		Description:  input.Description,
+		Tags:         strings.Split(input.Tags, ","),
+		RobotType:    input.RobotType,
+		InputSpec:    input.InputSpec,
+		OutputSpec:   input.OutputSpec,
+		License:      input.License,
+		Dependencies: strings.Split(input.Dependencies, ","),
+	})
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
 func (h *Handler) addModelVersion(c *gin.Context) {
 	claims := middleware.MustClaims(c)
 	id := parseUintParam(c, "id")
@@ -691,6 +949,15 @@ func (h *Handler) datasetOptions(c *gin.Context) {
 	support.RespondOK(c, data)
 }
 
+func (h *Handler) filterOptions(c *gin.Context) {
+	data, err := h.catalog.FilterOptions()
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
 func (h *Handler) datasetDetail(c *gin.Context) {
 	id := parseUintParam(c, "id")
 	data, err := h.datasets.Detail(id, h.currentUserID(c))
@@ -751,6 +1018,33 @@ func (h *Handler) createDataset(c *gin.Context) {
 		return
 	}
 	support.RespondCreated(c, data)
+}
+
+func (h *Handler) updateDataset(c *gin.Context) {
+	claims := middleware.MustClaims(c)
+	var input dto.DatasetUpdateRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, datasetUpdateLabels)))
+		return
+	}
+
+	data, err := h.datasets.Update(parseUintParam(c, "id"), claims.UserID, service.DatasetUpdateInput{
+		Name:          input.Name,
+		Summary:       input.Summary,
+		Description:   input.Description,
+		Tags:          strings.Split(input.Tags, ","),
+		SampleCount:   input.SampleCount,
+		Device:        input.Device,
+		Scene:         input.Scene,
+		Privacy:       input.Privacy,
+		AgreementText: input.AgreementText,
+		SamplePreview: splitLines(input.SamplePreview),
+	})
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
 }
 
 func (h *Handler) addDatasetVersion(c *gin.Context) {
@@ -847,6 +1141,16 @@ func (h *Handler) myDatasetAccessRequest(c *gin.Context) {
 	support.RespondOK(c, data)
 }
 
+func (h *Handler) myDatasetAccessHistory(c *gin.Context) {
+	claims := middleware.MustClaims(c)
+	data, err := h.datasets.MyAccessRequestHistory(parseUintParam(c, "id"), claims.UserID)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
 func (h *Handler) createDatasetAccessRequest(c *gin.Context) {
 	claims := middleware.MustClaims(c)
 	var input dto.DatasetAccessRequestPayload
@@ -860,6 +1164,16 @@ func (h *Handler) createDatasetAccessRequest(c *gin.Context) {
 		return
 	}
 	support.RespondCreated(c, data)
+}
+
+func (h *Handler) myDatasetAccessRequests(c *gin.Context) {
+	claims := middleware.MustClaims(c)
+	data, err := h.datasets.MyAccessRequests(claims.UserID)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
 }
 
 func (h *Handler) listTemplates(c *gin.Context) {
@@ -1062,7 +1376,12 @@ func (h *Handler) adminCreateAnnouncement(c *gin.Context) {
 }
 
 func (h *Handler) adminDatasetAccessRequests(c *gin.Context) {
-	data, err := h.datasets.AdminAccessRequests()
+	var query dto.DatasetAccessAdminQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", "访问申请筛选参数不正确"))
+		return
+	}
+	data, err := h.datasets.AdminAccessRequests(query)
 	if err != nil {
 		support.RespondError(c, err)
 		return
@@ -1082,6 +1401,20 @@ func (h *Handler) adminReviewDatasetAccessRequest(c *gin.Context) {
 		return
 	}
 	support.RespondMessage(c, "dataset access request reviewed", nil)
+}
+
+func (h *Handler) adminBatchReviewDatasetAccessRequests(c *gin.Context) {
+	claims := middleware.MustClaims(c)
+	var input dto.BatchDatasetAccessDecisionRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, batchDatasetAccessDecisionLabels)))
+		return
+	}
+	if err := h.datasets.BatchReviewAccessRequests(claims.UserID, input); err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondMessage(c, "dataset access requests reviewed", nil)
 }
 
 func parseUintParam(c *gin.Context, key string) uint {
@@ -1112,7 +1445,7 @@ func splitLines(input string) []string {
 	return result
 }
 
-func collectDatasetSampleFiles(storage *support.LocalStorage, c *gin.Context) []service.DatasetSampleInput {
+func collectDatasetSampleFiles(storage support.ObjectStorage, c *gin.Context) []service.DatasetSampleInput {
 	form, err := c.MultipartForm()
 	if err != nil || form == nil {
 		return nil

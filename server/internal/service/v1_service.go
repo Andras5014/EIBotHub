@@ -3,6 +3,9 @@ package service
 import (
 	"errors"
 	"net/http"
+	"sort"
+	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -302,11 +305,13 @@ func (s *CommunityService) GetSkill(id uint) (*dto.SkillItem, error) {
 }
 
 func (s *CommunityService) CreateDiscussion(userID uint, input dto.DiscussionRequest) (*dto.DiscussionItem, error) {
+	tag := strings.TrimSpace(input.Tag)
+	content := strings.TrimSpace(input.Content)
 	item := &model.Discussion{
-		Title:    input.Title,
-		Summary:  input.Summary,
-		Content:  input.Content,
-		Category: input.Category,
+		Title:    strings.TrimSpace(input.Title),
+		Summary:  buildDiscussionSummary(content),
+		Content:  content,
+		Category: tag,
 		UserID:   userID,
 	}
 	if err := s.community.CreateDiscussion(item); err != nil {
@@ -321,7 +326,7 @@ func (s *CommunityService) CreateDiscussion(userID uint, input dto.DiscussionReq
 		s.hooks.Emit(userID, WebhookEventDiscussionCreated, map[string]any{
 			"discussion_id": result.ID,
 			"title":         result.Title,
-			"category":      result.Category,
+			"tag":           result.Tag,
 			"user_id":       result.UserID,
 			"user_name":     result.UserName,
 		})
@@ -329,8 +334,8 @@ func (s *CommunityService) CreateDiscussion(userID uint, input dto.DiscussionReq
 	return result, nil
 }
 
-func (s *CommunityService) ListDiscussions() ([]dto.DiscussionItem, error) {
-	items, err := s.community.ListDiscussions()
+func (s *CommunityService) ListDiscussions(query dto.DiscussionListQuery) ([]dto.DiscussionItem, error) {
+	items, err := s.community.ListDiscussions(query.Q, query.Tag)
 	if err != nil {
 		return nil, err
 	}
@@ -340,18 +345,11 @@ func (s *CommunityService) ListDiscussions() ([]dto.DiscussionItem, error) {
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, dto.DiscussionItem{
-			ID:           item.ID,
-			Title:        item.Title,
-			Summary:      item.Summary,
-			Content:      item.Content,
-			Category:     item.Category,
-			UserID:       item.UserID,
-			UserName:     item.User.Username,
-			CommentCount: count,
-			CreatedAt:    item.CreatedAt,
-			UpdatedAt:    item.UpdatedAt,
-		})
+		result = append(result, *toDiscussionItem(item, count))
+	}
+	sortDiscussionItems(result, query.Sort)
+	if query.Limit > 0 && len(result) > query.Limit {
+		result = result[:query.Limit]
 	}
 	return result, nil
 }
@@ -365,18 +363,7 @@ func (s *CommunityService) GetDiscussion(id uint) (*dto.DiscussionItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := &dto.DiscussionItem{
-		ID:           item.ID,
-		Title:        item.Title,
-		Summary:      item.Summary,
-		Content:      item.Content,
-		Category:     item.Category,
-		UserID:       item.UserID,
-		UserName:     item.User.Username,
-		CommentCount: count,
-		CreatedAt:    item.CreatedAt,
-		UpdatedAt:    item.UpdatedAt,
-	}
+	result := toDiscussionItem(*item, count)
 	return result, nil
 }
 
@@ -501,18 +488,7 @@ func (s *CommunityService) UserContributions(userID uint) (*dto.UserContribution
 		if err != nil {
 			return nil, err
 		}
-		result.Discussions = append(result.Discussions, dto.DiscussionItem{
-			ID:           item.ID,
-			Title:        item.Title,
-			Summary:      item.Summary,
-			Content:      item.Content,
-			Category:     item.Category,
-			UserID:       item.UserID,
-			UserName:     item.User.Username,
-			CommentCount: count,
-			CreatedAt:    item.CreatedAt,
-			UpdatedAt:    item.UpdatedAt,
-		})
+		result.Discussions = append(result.Discussions, *toDiscussionItem(item, count))
 	}
 	return result, nil
 }
@@ -562,7 +538,7 @@ func (s *CommunityService) AdminHideSkill(id uint) error {
 }
 
 func (s *CommunityService) AdminDiscussions() ([]dto.AdminDiscussionModerationItem, error) {
-	items, err := s.community.ListDiscussions()
+	items, err := s.community.ListDiscussions("", "")
 	if err != nil {
 		return nil, err
 	}
@@ -575,7 +551,7 @@ func (s *CommunityService) AdminDiscussions() ([]dto.AdminDiscussionModerationIt
 		result = append(result, dto.AdminDiscussionModerationItem{
 			ID:           item.ID,
 			Title:        item.Title,
-			Category:     item.Category,
+			Tag:          item.Category,
 			UserID:       item.UserID,
 			UserName:     item.User.Username,
 			CommentCount: count,
@@ -587,6 +563,77 @@ func (s *CommunityService) AdminDiscussions() ([]dto.AdminDiscussionModerationIt
 
 func (s *CommunityService) AdminDeleteDiscussion(id uint) error {
 	return s.community.DeleteDiscussion(id)
+}
+
+func buildDiscussionSummary(content string) string {
+	normalized := strings.Join(strings.Fields(strings.TrimSpace(content)), " ")
+	if normalized == "" {
+		return ""
+	}
+	runes := []rune(normalized)
+	if len(runes) <= 72 {
+		return normalized
+	}
+	return string(runes[:72]) + "..."
+}
+
+func discussionHotScore(commentCount int64, createdAt, updatedAt time.Time) int64 {
+	referenceTime := updatedAt
+	if referenceTime.Before(createdAt) {
+		referenceTime = createdAt
+	}
+	ageHours := int64(time.Since(referenceTime).Hours())
+	if ageHours < 0 {
+		ageHours = 0
+	}
+	var recentBoost int64
+	if ageHours < 96 {
+		recentBoost = 96 - ageHours
+	}
+	return commentCount*100 + recentBoost
+}
+
+func toDiscussionItem(item model.Discussion, commentCount int64) *dto.DiscussionItem {
+	summary := strings.TrimSpace(item.Summary)
+	if summary == "" {
+		summary = buildDiscussionSummary(item.Content)
+	}
+	return &dto.DiscussionItem{
+		ID:           item.ID,
+		Title:        item.Title,
+		Summary:      summary,
+		Content:      item.Content,
+		Tag:          item.Category,
+		UserID:       item.UserID,
+		UserName:     item.User.Username,
+		CommentCount: commentCount,
+		HotScore:     discussionHotScore(commentCount, item.CreatedAt, item.UpdatedAt),
+		CreatedAt:    item.CreatedAt,
+		UpdatedAt:    item.UpdatedAt,
+	}
+}
+
+func sortDiscussionItems(items []dto.DiscussionItem, sortKey string) {
+	switch strings.TrimSpace(sortKey) {
+	case "latest":
+		sort.SliceStable(items, func(i, j int) bool {
+			return items[i].CreatedAt.After(items[j].CreatedAt)
+		})
+	case "comments":
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].CommentCount == items[j].CommentCount {
+				return items[i].UpdatedAt.After(items[j].UpdatedAt)
+			}
+			return items[i].CommentCount > items[j].CommentCount
+		})
+	default:
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].HotScore == items[j].HotScore {
+				return items[i].UpdatedAt.After(items[j].UpdatedAt)
+			}
+			return items[i].HotScore > items[j].HotScore
+		})
+	}
 }
 
 func (s *CommunityService) AdminComments() ([]dto.AdminCommentModerationItem, error) {

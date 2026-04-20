@@ -11,7 +11,16 @@ import (
 )
 
 func (h *Handler) hotQueries(c *gin.Context) {
-	data, err := h.community.HotQueries()
+	data, err := h.search.HotQueries()
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) recommendedQueries(c *gin.Context) {
+	data, err := h.search.RecommendedQueries()
 	if err != nil {
 		support.RespondError(c, err)
 		return
@@ -160,7 +169,12 @@ func (h *Handler) commentSkill(c *gin.Context) {
 }
 
 func (h *Handler) listDiscussions(c *gin.Context) {
-	data, err := h.community.ListDiscussions()
+	var query dto.DiscussionListQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", "讨论查询参数不合法"))
+		return
+	}
+	data, err := h.community.ListDiscussions(query)
 	if err != nil {
 		support.RespondError(c, err)
 		return
@@ -325,6 +339,51 @@ func (h *Handler) adminDeleteComment(c *gin.Context) {
 		return
 	}
 	support.RespondMessage(c, "comment removed", nil)
+}
+
+func (h *Handler) adminSearchKeywords(c *gin.Context) {
+	data, err := h.search.AdminSearchKeywords(c.Query("keyword_type"))
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminCreateSearchKeyword(c *gin.Context) {
+	var input dto.SearchKeywordConfigRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, searchKeywordLabels)))
+		return
+	}
+	data, err := h.search.CreateSearchKeyword(input)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondCreated(c, data)
+}
+
+func (h *Handler) adminUpdateSearchKeyword(c *gin.Context) {
+	var input dto.SearchKeywordConfigRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		support.RespondError(c, support.NewError(http.StatusBadRequest, "invalid_request", support.ValidationMessage(err, searchKeywordLabels)))
+		return
+	}
+	data, err := h.search.UpdateSearchKeyword(parseUintParam(c, "id"), input)
+	if err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondOK(c, data)
+}
+
+func (h *Handler) adminDeleteSearchKeyword(c *gin.Context) {
+	if err := h.search.DeleteSearchKeyword(parseUintParam(c, "id")); err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondMessage(c, "search keyword deleted", nil)
 }
 
 func (h *Handler) getRatings(c *gin.Context, resourceType string) {

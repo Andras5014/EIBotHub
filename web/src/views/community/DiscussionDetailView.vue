@@ -2,12 +2,11 @@
   <div class="page-shell" v-if="detail">
     <div class="page-card block">
       <a-space wrap>
-        <span class="pill-meta">{{ detail.category }}</span>
+        <span class="pill-meta">{{ detail.tag }}</span>
         <span class="pill-meta">{{ detail.user_name }}</span>
         <span class="pill-meta">评论 {{ detail.comment_count }}</span>
       </a-space>
       <h1 class="section-title" style="margin-top: 10px">{{ detail.title }}</h1>
-      <p class="section-subtitle">{{ detail.summary }}</p>
       <a-space style="margin-top: 12px">
         <a-button @click="contactAuthor">联系作者</a-button>
         <a-button @click="startWorkspace">创建协作空间</a-button>
@@ -48,24 +47,32 @@
         <a-empty v-if="!commentThreads.length" description="还没有评论" />
 
         <div v-else class="comment-thread-list">
-          <div v-for="item in commentThreads" :key="item.id" class="comment-card">
-            <div class="comment-head">
+          <div v-for="item in commentThreads" :key="item.id" :class="['comment-card', { 'author-comment': isPostAuthor(item.user_id) }]">
+            <div class="comment-author-row">
               <div class="comment-author">{{ item.user_name }}</div>
+              <span v-if="isPostAuthor(item.user_id)" class="author-badge">贴主</span>
+            </div>
+            <div class="comment-meta">
+              <div class="comment-relation">{{ relationLabel(item) }}</div>
               <div class="comment-date">{{ formatDate(item.created_at) }}</div>
             </div>
             <div class="comment-body">{{ item.content }}</div>
-            <a-space>
+            <a-space class="comment-actions">
               <a-button type="link" size="small" @click="setReply(item)">回复</a-button>
             </a-space>
 
             <div v-if="item.replies.length" class="reply-list">
-              <div v-for="reply in item.replies" :key="reply.id" class="reply-card">
-                <div class="comment-head">
+              <div v-for="reply in item.replies" :key="reply.id" :class="['reply-card', { 'author-comment': isPostAuthor(reply.user_id) }]">
+                <div class="comment-author-row">
                   <div class="comment-author">{{ reply.user_name }}</div>
+                  <span v-if="isPostAuthor(reply.user_id)" class="author-badge">贴主</span>
+                </div>
+                <div class="comment-meta">
+                  <div class="comment-relation">{{ relationLabel(reply) }}</div>
                   <div class="comment-date">{{ formatDate(reply.created_at) }}</div>
                 </div>
                 <div class="comment-body">{{ reply.content }}</div>
-                <a-button type="link" size="small" @click="setReply(reply)">继续回复</a-button>
+                <a-button type="link" size="small" class="comment-actions" @click="setReply(reply)">继续回复</a-button>
               </div>
             </div>
           </div>
@@ -96,6 +103,8 @@ const form = reactive({
   content: '',
   parent_id: undefined as number | undefined,
 });
+
+const commentLookup = computed(() => new Map(comments.value.map((item) => [item.id, item])));
 
 const commentThreads = computed<ThreadComment[]>(() => {
   const roots = comments.value.filter((item) => !item.parent_id);
@@ -145,6 +154,18 @@ function clearReply() {
   form.parent_id = undefined;
 }
 
+function isPostAuthor(userID: number) {
+  return userID === detail.value?.user_id;
+}
+
+function relationLabel(item: CommentItem) {
+  if (!item.parent_id) {
+    return '回复帖子';
+  }
+  const targetName = commentLookup.value.get(item.parent_id)?.user_name ?? detail.value?.user_name ?? '贴主';
+  return `回复 ${targetName}`;
+}
+
 function contactAuthor() {
   if (!detail.value) return;
   router.push({ name: 'messages', query: { recipient: String(detail.value.user_id) } });
@@ -180,10 +201,23 @@ onMounted(load);
 
 .comment-card,
 .reply-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "author meta"
+    "body meta"
+    "actions meta";
+  gap: 4px 12px;
+  align-items: start;
   border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--surface-soft);
   padding: 14px;
+}
+
+.author-comment {
+  border-color: rgba(22, 119, 255, 0.28);
+  background: linear-gradient(180deg, #fafdff 0%, #f2f8ff 100%);
 }
 
 .reply-list {
@@ -194,15 +228,40 @@ onMounted(load);
   border-left: 2px solid rgba(22, 119, 255, 0.14);
 }
 
-.comment-head {
+.comment-author-row {
+  grid-area: author;
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .comment-author {
   font-weight: 700;
+}
+
+.author-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(22, 119, 255, 0.12);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.comment-meta {
+  grid-area: meta;
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.comment-relation {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .comment-date {
@@ -211,8 +270,29 @@ onMounted(load);
 }
 
 .comment-body {
+  grid-area: body;
   white-space: pre-wrap;
   color: var(--text-main);
-  margin-bottom: 8px;
+  margin-bottom: 0;
+}
+
+.comment-actions {
+  grid-area: actions;
+}
+
+@media (max-width: 720px) {
+  .comment-card,
+  .reply-card {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "author"
+      "meta"
+      "body"
+      "actions";
+  }
+
+  .comment-meta {
+    justify-items: start;
+  }
 }
 </style>

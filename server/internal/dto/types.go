@@ -23,6 +23,7 @@ type ResourceListQuery struct {
 	Q         string `form:"q"`
 	Tags      string `form:"tags"`
 	RobotType string `form:"robot_type"`
+	Scene     string `form:"scene"`
 	Status    string `form:"status"`
 	Page      int    `form:"page"`
 	PageSize  int    `form:"page_size"`
@@ -38,6 +39,31 @@ type SearchQuery struct {
 	UpdatedWithin int    `form:"updated_within"`
 	Page          int    `form:"page"`
 	PageSize      int    `form:"page_size"`
+}
+
+type DiscussionListQuery struct {
+	Q     string `form:"q"`
+	Tag   string `form:"tag"`
+	Sort  string `form:"sort"`
+	Limit int    `form:"limit"`
+}
+
+type SearchKeywordConfigRequest struct {
+	Query       string `json:"query" binding:"required,min=1,max=160"`
+	KeywordType string `json:"keyword_type" binding:"required,oneof=hot recommended"`
+	SortOrder   int    `json:"sort_order" binding:"gte=0,lte=1000"`
+	Enabled     bool   `json:"enabled"`
+}
+
+type FilterOptionConfigRequest struct {
+	Kind      string `json:"kind" binding:"required,oneof=tag model_tag dataset_tag robot_type dataset_scene template_category template_scene application_case_category"`
+	Value     string `json:"value" binding:"required,min=1,max=160"`
+	SortOrder int    `json:"sort_order" binding:"gte=0,lte=1000"`
+	Enabled   bool   `json:"enabled"`
+}
+
+type ModelRecommendTagRequest struct {
+	RecommendTag string `json:"recommend_tag" binding:"max=64"`
 }
 
 type FavoriteRequest struct {
@@ -59,12 +85,46 @@ type AnnouncementRequest struct {
 }
 
 type ModuleSettingRequest struct {
-	Enabled bool `json:"enabled"`
+	Enabled   bool `json:"enabled"`
+	SortOrder int  `json:"sort_order" binding:"gte=0,lte=1000"`
+}
+
+type HomeHighlightRequest struct {
+	Text      string `json:"text" binding:"required,min=2,max=255"`
+	SortOrder int    `json:"sort_order" binding:"gte=0,lte=1000"`
+	Enabled   bool   `json:"enabled"`
+}
+
+type HomeHeroConfigRequest struct {
+	Tagline         string `json:"tagline" binding:"required,min=2,max=120"`
+	Title           string `json:"title" binding:"required,min=2,max=255"`
+	Description     string `json:"description" binding:"required,min=6,max=1024"`
+	PrimaryButton   string `json:"primary_button" binding:"required,min=2,max=64"`
+	SecondaryButton string `json:"secondary_button" binding:"required,min=2,max=64"`
+	SearchButton    string `json:"search_button" binding:"required,min=2,max=64"`
+}
+
+type RankingConfigRequest struct {
+	Title    string `json:"title" binding:"required,min=2,max=160"`
+	Subtitle string `json:"subtitle" binding:"max=255"`
+	Limit    int    `json:"limit" binding:"required,gte=1,lte=20"`
+	Enabled  bool   `json:"enabled"`
+}
+
+type ScenePageRequest struct {
+	Slug        string `json:"slug" binding:"required,min=2,max=64"`
+	Name        string `json:"name" binding:"required,min=2,max=120"`
+	Tagline     string `json:"tagline" binding:"max=120"`
+	Summary     string `json:"summary" binding:"required,min=4,max=255"`
+	Description string `json:"description" binding:"max=1024"`
+	SortOrder   int    `json:"sort_order" binding:"gte=0,lte=1000"`
+	Enabled     bool   `json:"enabled"`
 }
 
 type FeaturedResourceRequest struct {
 	ResourceType string `json:"resource_type" binding:"required,oneof=model dataset task-template application-case"`
 	ResourceID   uint   `json:"resource_id" binding:"required"`
+	BadgeLabel   string `json:"badge_label" binding:"max=64"`
 	SortOrder    int    `json:"sort_order" binding:"gte=0,lte=1000"`
 	Enabled      bool   `json:"enabled"`
 }
@@ -155,6 +215,18 @@ type ModelCreateRequest struct {
 	Changelog    string `form:"changelog" binding:"required,max=512"`
 }
 
+type ModelUpdateRequest struct {
+	Name         string `json:"name" binding:"required,min=2,max=160"`
+	Summary      string `json:"summary" binding:"required,min=4,max=255"`
+	Description  string `json:"description" binding:"required,min=10,max=5000"`
+	Tags         string `json:"tags" binding:"max=255"`
+	RobotType    string `json:"robot_type" binding:"required,max=128"`
+	InputSpec    string `json:"input_spec" binding:"required,max=255"`
+	OutputSpec   string `json:"output_spec" binding:"required,max=255"`
+	License      string `json:"license" binding:"required,max=120"`
+	Dependencies string `json:"dependencies" binding:"max=255"`
+}
+
 type ModelVersionRequest struct {
 	Version   string `form:"version" binding:"required,max=64"`
 	Changelog string `form:"changelog" binding:"required,max=512"`
@@ -175,6 +247,19 @@ type DatasetCreateRequest struct {
 	SamplePreview string `form:"sample_preview" binding:"max=5000"`
 }
 
+type DatasetUpdateRequest struct {
+	Name          string `json:"name" binding:"required,min=2,max=160"`
+	Summary       string `json:"summary" binding:"required,min=4,max=255"`
+	Description   string `json:"description" binding:"required,min=10,max=5000"`
+	Tags          string `json:"tags" binding:"max=255"`
+	SampleCount   int    `json:"sample_count" binding:"required,gte=1,lte=100000000"`
+	Device        string `json:"device" binding:"required,max=128"`
+	Scene         string `json:"scene" binding:"required,max=128"`
+	Privacy       string `json:"privacy" binding:"required,max=64"`
+	AgreementText string `json:"agreement_text" binding:"required,min=6,max=5000"`
+	SamplePreview string `json:"sample_preview" binding:"max=5000"`
+}
+
 type DatasetVersionRequest struct {
 	Version   string `form:"version" binding:"required,max=64"`
 	Changelog string `form:"changelog" binding:"required,max=512"`
@@ -189,17 +274,36 @@ type DatasetAccessRequestPayload struct {
 }
 
 type DatasetAccessDecisionRequest struct {
-	Decision string `json:"decision" binding:"required,oneof=approved rejected"`
-	Comment  string `json:"comment" binding:"max=512"`
+	Decision      string `json:"decision" binding:"required,oneof=approved rejected"`
+	Comment       string `json:"comment" binding:"max=512"`
+	ValidDays     int    `json:"valid_days" binding:"gte=0,lte=3650"`
+	DownloadLimit int    `json:"download_limit" binding:"gte=0,lte=10000"`
+}
+
+type DatasetAccessAdminQuery struct {
+	Status    string `form:"status"`
+	Privacy   string `form:"privacy"`
+	OwnerID   uint   `form:"owner_id"`
+	SLAStatus string `form:"sla_status"`
+	Q         string `form:"q"`
+}
+
+type BatchDatasetAccessDecisionRequest struct {
+	IDs           []uint `json:"ids" binding:"required,min=1,max=100"`
+	Decision      string `json:"decision" binding:"required,oneof=approved rejected"`
+	Comment       string `json:"comment" binding:"max=512"`
+	ValidDays     int    `json:"valid_days" binding:"gte=0,lte=3650"`
+	DownloadLimit int    `json:"download_limit" binding:"gte=0,lte=10000"`
 }
 
 type UserSummary struct {
-	ID       uint   `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
-	Bio      string `json:"bio"`
-	Avatar   string `json:"avatar"`
+	ID          uint     `json:"id"`
+	Username    string   `json:"username"`
+	Email       string   `json:"email"`
+	Role        string   `json:"role"`
+	Permissions []string `json:"permissions,omitempty"`
+	Bio         string   `json:"bio"`
+	Avatar      string   `json:"avatar"`
 }
 
 type AuthResponse struct {
@@ -220,8 +324,49 @@ type ModuleSettingItem struct {
 	ID        uint      `json:"id"`
 	ModuleKey string    `json:"module_key"`
 	Label     string    `json:"label"`
+	SortOrder int       `json:"sort_order"`
 	Enabled   bool      `json:"enabled"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type HomeHighlightItem struct {
+	ID        uint      `json:"id"`
+	Text      string    `json:"text"`
+	SortOrder int       `json:"sort_order"`
+	Enabled   bool      `json:"enabled"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type HomeHeroConfigItem struct {
+	ID              uint      `json:"id,omitempty"`
+	Tagline         string    `json:"tagline"`
+	Title           string    `json:"title"`
+	Description     string    `json:"description"`
+	PrimaryButton   string    `json:"primary_button"`
+	SecondaryButton string    `json:"secondary_button"`
+	SearchButton    string    `json:"search_button"`
+	UpdatedAt       time.Time `json:"updated_at,omitempty"`
+}
+
+type RankingConfigItem struct {
+	ID        uint      `json:"id"`
+	Title     string    `json:"title"`
+	Subtitle  string    `json:"subtitle"`
+	Limit     int       `json:"limit"`
+	Enabled   bool      `json:"enabled"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type ScenePageItem struct {
+	ID          uint      `json:"id"`
+	Slug        string    `json:"slug"`
+	Name        string    `json:"name"`
+	Tagline     string    `json:"tagline"`
+	Summary     string    `json:"summary"`
+	Description string    `json:"description"`
+	SortOrder   int       `json:"sort_order"`
+	Enabled     bool      `json:"enabled"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type FeaturedResourceItem struct {
@@ -231,23 +376,26 @@ type FeaturedResourceItem struct {
 	Title        string    `json:"title"`
 	Summary      string    `json:"summary"`
 	Route        string    `json:"route"`
+	BadgeLabel   string    `json:"badge_label"`
 	SortOrder    int       `json:"sort_order"`
 	Enabled      bool      `json:"enabled"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type ResourceCard struct {
-	ID          uint      `json:"id"`
-	Name        string    `json:"name"`
-	Summary     string    `json:"summary"`
-	Description string    `json:"description,omitempty"`
-	Type        string    `json:"type"`
-	Tags        []string  `json:"tags"`
-	RobotType   string    `json:"robot_type,omitempty"`
-	Downloads   int64     `json:"downloads"`
-	Status      string    `json:"status,omitempty"`
-	Owner       string    `json:"owner,omitempty"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID            uint      `json:"id"`
+	Name          string    `json:"name"`
+	Summary       string    `json:"summary"`
+	Description   string    `json:"description,omitempty"`
+	Type          string    `json:"type"`
+	Tags          []string  `json:"tags"`
+	RobotType     string    `json:"robot_type,omitempty"`
+	BadgeLabel    string    `json:"badge_label,omitempty"`
+	Downloads     int64     `json:"downloads"`
+	Status        string    `json:"status,omitempty"`
+	Owner         string    `json:"owner,omitempty"`
+	ReviewComment string    `json:"review_comment,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type SearchItem struct {
@@ -261,8 +409,27 @@ type SearchItem struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type SearchTypeCountItem struct {
+	Type  string `json:"type"`
+	Label string `json:"label"`
+	Count int64  `json:"count"`
+}
+
+type SearchResponse struct {
+	Items            []SearchItem           `json:"items"`
+	Page             int                    `json:"page"`
+	PageSize         int                    `json:"page_size"`
+	Total            int64                  `json:"total"`
+	FocusType        string                 `json:"focus_type,omitempty"`
+	TypeCounts       []SearchTypeCountItem  `json:"type_counts"`
+	SameTypeItems    []SearchItem           `json:"same_type_items"`
+	RelatedItems     []SearchItem           `json:"related_items"`
+	SuggestedQueries []SearchSuggestionItem `json:"suggested_queries"`
+}
+
 type ModelDetail struct {
 	ResourceCard
+	RecommendTag string        `json:"recommend_tag,omitempty"`
 	InputSpec    string        `json:"input_spec"`
 	OutputSpec   string        `json:"output_spec"`
 	License      string        `json:"license"`
@@ -386,15 +553,37 @@ type DatasetOptionsResponse struct {
 	PrivacyOptions     []DatasetPrivacyOptionItem `json:"privacy_options"`
 }
 
+type FilterOptionsResponse struct {
+	Tags                      []string `json:"tags"`
+	ModelTags                 []string `json:"model_tags"`
+	DatasetTags               []string `json:"dataset_tags"`
+	RobotTypes                []string `json:"robot_types"`
+	DatasetScenes             []string `json:"dataset_scenes"`
+	TemplateCategories        []string `json:"template_categories"`
+	TemplateScenes            []string `json:"template_scenes"`
+	ApplicationCaseCategories []string `json:"application_case_categories"`
+}
+
 type HomeResponse struct {
 	PlatformIntro    string                `json:"platform_intro"`
+	HeroConfig       HomeHeroConfigItem    `json:"hero_config"`
 	Highlights       []string              `json:"highlights"`
 	Announcements    []AnnouncementItem    `json:"announcements"`
 	HotModels        []ResourceCard        `json:"hot_models"`
 	HotDatasets      []ResourceCard        `json:"hot_datasets"`
 	TaskTemplates    []TaskTemplateItem    `json:"task_templates"`
 	ApplicationCases []ApplicationCaseItem `json:"application_cases"`
+	ScenePages       []ScenePageItem       `json:"scene_pages"`
 	ModuleSettings   []ModuleSettingItem   `json:"module_settings"`
+	RankingsConfig   RankingConfigItem     `json:"rankings_config"`
+}
+
+type ScenePageDetail struct {
+	Scene            ScenePageItem         `json:"scene"`
+	Models           []ResourceCard        `json:"models"`
+	Datasets         []ResourceCard        `json:"datasets"`
+	TaskTemplates    []TaskTemplateItem    `json:"task_templates"`
+	ApplicationCases []ApplicationCaseItem `json:"application_cases"`
 }
 
 type DashboardResponse struct {
@@ -485,15 +674,31 @@ type DownloadPackageTaskItem struct {
 }
 
 type DatasetAccessRequestItem struct {
-	ID            uint       `json:"id"`
-	DatasetID     uint       `json:"dataset_id"`
-	UserID        uint       `json:"user_id"`
-	UserName      string     `json:"user_name,omitempty"`
-	Reason        string     `json:"reason"`
-	Status        string     `json:"status"`
-	ReviewComment string     `json:"review_comment"`
-	ReviewedAt    *time.Time `json:"reviewed_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID                  uint       `json:"id"`
+	DatasetID           uint       `json:"dataset_id"`
+	DatasetName         string     `json:"dataset_name,omitempty"`
+	DatasetPrivacy      string     `json:"dataset_privacy,omitempty"`
+	DatasetOwnerID      uint       `json:"dataset_owner_id,omitempty"`
+	DatasetOwnerName    string     `json:"dataset_owner_name,omitempty"`
+	UserID              uint       `json:"user_id"`
+	UserName            string     `json:"user_name,omitempty"`
+	Reason              string     `json:"reason"`
+	Status              string     `json:"status"`
+	ReviewComment       string     `json:"review_comment"`
+	ApprovalStage       int        `json:"approval_stage"`
+	RequiredApprovals   int        `json:"required_approvals"`
+	ApprovalExpiresAt   *time.Time `json:"approval_expires_at,omitempty"`
+	DownloadLimit       int        `json:"download_limit"`
+	DownloadCount       int        `json:"download_count"`
+	RemainingDownloads  *int       `json:"remaining_downloads,omitempty"`
+	IsExpired           bool       `json:"is_expired"`
+	AuthorizationActive bool       `json:"authorization_active"`
+	SLAHours            int        `json:"sla_hours"`
+	SLADeadlineAt       *time.Time `json:"sla_deadline_at,omitempty"`
+	SLAOverdue          bool       `json:"sla_overdue"`
+	SLARemainingMinutes int        `json:"sla_remaining_minutes"`
+	ReviewedAt          *time.Time `json:"reviewed_at,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
 }
 
 type StatValueItem struct {
@@ -535,10 +740,9 @@ type SkillItem struct {
 }
 
 type DiscussionRequest struct {
-	Title    string `json:"title" binding:"required,min=2,max=160"`
-	Summary  string `json:"summary" binding:"required,min=4,max=255"`
-	Content  string `json:"content" binding:"required,min=10,max=5000"`
-	Category string `json:"category" binding:"required,max=128"`
+	Title   string `json:"title" binding:"required,min=2,max=160"`
+	Tag     string `json:"tag" binding:"required,min=1,max=128"`
+	Content string `json:"content" binding:"required,min=10,max=5000"`
 }
 
 type DiscussionItem struct {
@@ -546,10 +750,11 @@ type DiscussionItem struct {
 	Title        string    `json:"title"`
 	Summary      string    `json:"summary"`
 	Content      string    `json:"content"`
-	Category     string    `json:"category"`
+	Tag          string    `json:"tag"`
 	UserID       uint      `json:"user_id"`
 	UserName     string    `json:"user_name"`
 	CommentCount int64     `json:"comment_count"`
+	HotScore     int64     `json:"hot_score"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -570,6 +775,38 @@ type FollowStats struct {
 type SearchHotItem struct {
 	Query string `json:"query"`
 	Count int64  `json:"count"`
+}
+
+type SearchSuggestionItem struct {
+	Query string `json:"query"`
+}
+
+type SearchKeywordConfigItem struct {
+	ID          uint      `json:"id"`
+	Query       string    `json:"query"`
+	KeywordType string    `json:"keyword_type"`
+	SortOrder   int       `json:"sort_order"`
+	Enabled     bool      `json:"enabled"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type FilterOptionConfigItem struct {
+	ID        uint      `json:"id"`
+	Kind      string    `json:"kind"`
+	Value     string    `json:"value"`
+	SortOrder int       `json:"sort_order"`
+	Enabled   bool      `json:"enabled"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type AdminModelRecommendTagItem struct {
+	ID           uint      `json:"id"`
+	Name         string    `json:"name"`
+	Summary      string    `json:"summary"`
+	RecommendTag string    `json:"recommend_tag"`
+	Status       string    `json:"status"`
+	OwnerName    string    `json:"owner_name"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type UserContributionPayload struct {
@@ -596,7 +833,7 @@ type AdminSkillModerationItem struct {
 type AdminDiscussionModerationItem struct {
 	ID           uint      `json:"id"`
 	Title        string    `json:"title"`
-	Category     string    `json:"category"`
+	Tag          string    `json:"tag"`
 	UserID       uint      `json:"user_id"`
 	UserName     string    `json:"user_name"`
 	CommentCount int64     `json:"comment_count"`
@@ -611,6 +848,42 @@ type AdminCommentModerationItem struct {
 	UserName     string    `json:"user_name"`
 	Content      string    `json:"content"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+type AdminConversationModerationItem struct {
+	ID               uint      `json:"id"`
+	Kind             string    `json:"kind"`
+	Title            string    `json:"title"`
+	ParticipantNames []string  `json:"participant_names"`
+	LatestMessage    string    `json:"latest_message"`
+	Active           bool      `json:"active"`
+	BlockedReason    string    `json:"blocked_reason"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type AdminWorkspaceModerationItem struct {
+	ID            uint         `json:"id"`
+	Name          string       `json:"name"`
+	Summary       string       `json:"summary"`
+	OwnerID       uint         `json:"owner_id"`
+	OwnerName     string       `json:"owner_name"`
+	MemberCount   int64        `json:"member_count"`
+	Members       []FollowItem `json:"members"`
+	Active        bool         `json:"active"`
+	BlockedReason string       `json:"blocked_reason"`
+	UpdatedAt     time.Time    `json:"updated_at"`
+}
+
+type AdminConversationModerationRequest struct {
+	Reason string `json:"reason" binding:"max=512"`
+}
+
+type AdminWorkspaceModerationRequest struct {
+	Reason string `json:"reason" binding:"max=512"`
+}
+
+type AdminWorkspaceMemberRemovalRequest struct {
+	UserID uint `json:"user_id" binding:"required"`
 }
 
 type DeveloperVerificationRequest struct {
@@ -852,6 +1125,8 @@ type ConversationItem struct {
 	WorkspaceID      *uint     `json:"workspace_id,omitempty"`
 	ParticipantNames []string  `json:"participant_names"`
 	LatestMessage    string    `json:"latest_message"`
+	Active           bool      `json:"active"`
+	BlockedReason    string    `json:"blocked_reason"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
@@ -875,6 +1150,8 @@ type WorkspaceItem struct {
 	OwnerID        uint      `json:"owner_id"`
 	ConversationID uint      `json:"conversation_id"`
 	MemberCount    int64     `json:"member_count"`
+	Active         bool      `json:"active"`
+	BlockedReason  string    `json:"blocked_reason"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 

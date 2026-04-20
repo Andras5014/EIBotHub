@@ -3,10 +3,12 @@ import type {
   AnnouncementItem,
   ApplicationCaseItem,
   AuthPayload,
+  BatchDatasetAccessDecisionPayload,
   DashboardPayload,
   DatasetDetail,
   DatasetAccessRequestItem,
   DatasetOptionsResponse,
+  FilterOptionsResponse,
   DatasetPrivacyOptionItem,
   DownloadPackageTaskItem,
   DatasetSample,
@@ -16,9 +18,13 @@ import type {
   FAQItem,
   FeaturedResourceItem,
   FavoriteRecord,
+  FilterOptionConfigItem,
   FollowItem,
   FollowStats,
   HomePayload,
+  HomeHighlightItem,
+  HomeHeroConfigItem,
+  RankingConfigItem,
   ModelEvaluationItem,
   ModelDetail,
   NotificationRecord,
@@ -26,7 +32,12 @@ import type {
   RatingSummary,
   ResourceCard,
   ReviewItem,
+  ScenePageDetailPayload,
+  ScenePageItem,
   SearchHotItem,
+  SearchResponse,
+  SearchSuggestionItem,
+  SearchKeywordConfigItem,
   SearchItem,
   SkillItem,
   TaskTemplateItem,
@@ -37,9 +48,12 @@ import type {
   CommentItem,
   DiscussionItem,
   AdminCommunityOverview,
+  AdminConversationModerationItem,
   AdminSkillModerationItem,
   AdminDiscussionModerationItem,
   AdminCommentModerationItem,
+  AdminWorkspaceModerationItem,
+  AdminModelRecommendTagItem,
   AdminVerificationItem,
   AdminOperationLogItem,
   AdminRewardOverview,
@@ -72,9 +86,12 @@ export const api = {
   logout: () => sendWithoutData({ url: '/auth/logout', method: 'post' }),
   me: () => request<UserSummary>({ url: '/users/me', method: 'get' }),
   home: () => request<HomePayload>({ url: '/portal/home', method: 'get' }),
+  listScenePages: () => request<ScenePageItem[]>({ url: '/scenes', method: 'get' }),
+  getScenePage: (slug: string) => request<ScenePageDetailPayload>({ url: `/scenes/${slug}`, method: 'get' }),
   search: (params: Record<string, unknown>) =>
-    request<Paginated<SearchItem>>({ url: '/search', method: 'get', params }),
+    request<SearchResponse>({ url: '/search', method: 'get', params }),
   hotQueries: () => request<SearchHotItem[]>({ url: '/search/hot', method: 'get' }),
+  recommendedQueries: () => request<SearchSuggestionItem[]>({ url: '/search/recommended', method: 'get' }),
   listModels: (params: Record<string, unknown>) =>
     request<Paginated<ResourceCard>>({ url: '/models', method: 'get', params }),
   getModel: (id: string | number) => request<ModelDetail>({ url: `/models/${id}`, method: 'get' }),
@@ -91,6 +108,20 @@ export const api = {
   commentModel: (id: string | number, payload: { content: string; parent_id?: number }) =>
     request<CommentItem>({ url: `/models/${id}/comments`, method: 'post', data: payload }),
   createModel: (formData: FormData) => request<ModelDetail>({ url: '/models', method: 'post', data: formData }),
+  updateModel: (
+    id: string | number,
+    payload: {
+      name: string;
+      summary: string;
+      description: string;
+      tags: string;
+      robot_type: string;
+      input_spec: string;
+      output_spec: string;
+      license: string;
+      dependencies: string;
+    },
+  ) => request<ModelDetail>({ url: `/models/${id}`, method: 'put', data: payload }),
   submitModel: (id: string | number) => sendWithoutData({ url: `/models/${id}/submit`, method: 'post' }),
   addModelVersion: (id: string | number, formData: FormData) =>
     request<ModelDetail>({ url: `/models/${id}/versions`, method: 'post', data: formData }),
@@ -98,6 +129,7 @@ export const api = {
   listDatasets: (params: Record<string, unknown>) =>
     request<Paginated<ResourceCard>>({ url: '/datasets', method: 'get', params }),
   getDatasetOptions: () => request<DatasetOptionsResponse>({ url: '/datasets/options', method: 'get' }),
+  getFilterOptions: () => request<FilterOptionsResponse>({ url: '/filter-options', method: 'get' }),
   getDataset: (id: string | number) => request<DatasetDetail>({ url: `/datasets/${id}`, method: 'get' }),
   getDatasetSamples: (id: string | number) => request<DatasetSample[]>({ url: `/datasets/${id}/samples`, method: 'get' }),
   getDatasetStats: (id: string | number) => request<DatasetStatsResponse>({ url: `/datasets/${id}/stats`, method: 'get' }),
@@ -108,6 +140,21 @@ export const api = {
   commentDataset: (id: string | number, payload: { content: string; parent_id?: number }) =>
     request<CommentItem>({ url: `/datasets/${id}/comments`, method: 'post', data: payload }),
   createDataset: (formData: FormData) => request<DatasetDetail>({ url: '/datasets', method: 'post', data: formData }),
+  updateDataset: (
+    id: string | number,
+    payload: {
+      name: string;
+      summary: string;
+      description: string;
+      tags: string;
+      sample_count: number;
+      device: string;
+      scene: string;
+      privacy: string;
+      agreement_text: string;
+      sample_preview: string;
+    },
+  ) => request<DatasetDetail>({ url: `/datasets/${id}`, method: 'put', data: payload }),
   addDatasetVersion: (id: string | number, formData: FormData) =>
     request<DatasetDetail>({ url: `/datasets/${id}/versions`, method: 'post', data: formData }),
   submitDataset: (id: string | number) => sendWithoutData({ url: `/datasets/${id}/submit`, method: 'post' }),
@@ -120,6 +167,8 @@ export const api = {
     request<DownloadPackageTaskItem>({ url: `/datasets/${id}/download-packages`, method: 'post', data: payload }),
   getMyDatasetAccessRequest: (id: string | number) =>
     request<DatasetAccessRequestItem | null>({ url: `/datasets/${id}/access-requests/me`, method: 'get' }),
+  getMyDatasetAccessHistory: (id: string | number) =>
+    request<DatasetAccessRequestItem[]>({ url: `/datasets/${id}/access-requests/history`, method: 'get' }),
   createDatasetAccessRequest: (id: string | number, payload: { reason: string }) =>
     request<DatasetAccessRequestItem>({ url: `/datasets/${id}/access-requests`, method: 'post', data: payload }),
   listTemplates: () => request<TaskTemplateItem[]>({ url: '/task-templates', method: 'get' }),
@@ -196,9 +245,10 @@ export const api = {
     sendWithoutData({ url: `/workspaces/${id}/members`, method: 'post', data: payload }),
   sendWorkspaceMessage: (id: string | number, payload: { content: string }) =>
     request<MessageItem>({ url: `/workspaces/${id}/messages`, method: 'post', data: payload }),
-  listDiscussions: () => request<DiscussionItem[]>({ url: '/discussions', method: 'get' }),
+  listDiscussions: (params: { q?: string; tag?: string; sort?: 'hot' | 'latest' | 'comments'; limit?: number } = {}) =>
+    request<DiscussionItem[]>({ url: '/discussions', method: 'get', params }),
   getDiscussion: (id: string | number) => request<DiscussionItem>({ url: `/discussions/${id}`, method: 'get' }),
-  createDiscussion: (payload: { title: string; summary: string; content: string; category: string }) =>
+  createDiscussion: (payload: { title: string; tag: string; content: string }) =>
     request<DiscussionItem>({ url: '/discussions', method: 'post', data: payload }),
   getDiscussionComments: (id: string | number) => request<CommentItem[]>({ url: `/discussions/${id}/comments`, method: 'get' }),
   commentDiscussion: (id: string | number, payload: { content: string; parent_id?: number }) =>
@@ -206,6 +256,7 @@ export const api = {
   getProfile: () => request<UserSummary>({ url: '/users/me/profile', method: 'get' }),
   updateProfile: (payload: { username: string; bio: string; avatar: string }) =>
     request<UserSummary>({ url: '/users/me/profile', method: 'put', data: payload }),
+  getMyDatasetAccessRequests: () => request<DatasetAccessRequestItem[]>({ url: '/users/me/dataset-access-requests', method: 'get' }),
   getUploads: () => request<UploadsPayload>({ url: '/users/me/uploads', method: 'get' }),
   getFavorites: () => request<FavoriteRecord[]>({ url: '/users/me/favorites', method: 'get' }),
   toggleFavorite: (payload: { resource_type: string; resource_id: number; title: string }) =>
@@ -224,20 +275,56 @@ export const api = {
     request<ReviewItem[]>({ url: '/admin/reviews', method: 'get', params: { type } }),
   decideReview: (type: 'models' | 'datasets', id: number, payload: { decision: 'approved' | 'rejected'; comment: string }) =>
     sendWithoutData({ url: `/admin/reviews/${type}/${id}/decision`, method: 'post', data: payload }),
-  getAdminDatasetAccessRequests: () =>
-    request<DatasetAccessRequestItem[]>({ url: '/admin/datasets/access-requests', method: 'get' }),
-  reviewAdminDatasetAccessRequest: (id: number, payload: { decision: 'approved' | 'rejected'; comment: string }) =>
+  getAdminDatasetAccessRequests: (params: Record<string, unknown> = {}) =>
+    request<DatasetAccessRequestItem[]>({ url: '/admin/datasets/access-requests', method: 'get', params }),
+  reviewAdminDatasetAccessRequest: (id: number, payload: { decision: 'approved' | 'rejected'; comment: string; valid_days: number; download_limit: number }) =>
     sendWithoutData({ url: `/admin/datasets/access-requests/${id}/decision`, method: 'post', data: payload }),
+  batchReviewAdminDatasetAccessRequests: (payload: BatchDatasetAccessDecisionPayload) =>
+    sendWithoutData({ url: '/admin/datasets/access-requests/batch-decision', method: 'post', data: payload }),
   getAdminAnnouncements: () => request<AnnouncementItem[]>({ url: '/admin/announcements', method: 'get' }),
   createAnnouncement: (payload: { title: string; summary: string; link: string; pinned: boolean }) =>
     request<AnnouncementItem>({ url: '/admin/announcements', method: 'post', data: payload }),
   getAdminPortalModules: () => request<ModuleSettingItem[]>({ url: '/admin/portal/modules', method: 'get' }),
-  updateAdminPortalModule: (key: string, payload: { enabled: boolean }) =>
+  updateAdminPortalModule: (key: string, payload: { enabled: boolean; sort_order: number }) =>
     sendWithoutData({ url: `/admin/portal/modules/${key}`, method: 'put', data: payload }),
+  getAdminHomeHeroConfig: () => request<HomeHeroConfigItem>({ url: '/admin/portal/hero-config', method: 'get' }),
+  updateAdminHomeHeroConfig: (payload: {
+    tagline: string;
+    title: string;
+    description: string;
+    primary_button: string;
+    secondary_button: string;
+    search_button: string;
+  }) => request<HomeHeroConfigItem>({ url: '/admin/portal/hero-config', method: 'put', data: payload }),
+  getAdminHomeHighlights: () => request<HomeHighlightItem[]>({ url: '/admin/portal/highlights', method: 'get' }),
+  createAdminHomeHighlight: (payload: { text: string; sort_order: number; enabled: boolean }) =>
+    request<HomeHighlightItem>({ url: '/admin/portal/highlights', method: 'post', data: payload }),
+  updateAdminHomeHighlight: (id: number, payload: { text: string; sort_order: number; enabled: boolean }) =>
+    request<HomeHighlightItem>({ url: `/admin/portal/highlights/${id}`, method: 'put', data: payload }),
+  deleteAdminHomeHighlight: (id: number) =>
+    sendWithoutData({ url: `/admin/portal/highlights/${id}`, method: 'delete' }),
+  getAdminScenePages: () => request<ScenePageItem[]>({ url: '/admin/portal/scenes', method: 'get' }),
+  createAdminScenePage: (payload: { slug: string; name: string; tagline: string; summary: string; description: string; sort_order: number; enabled: boolean }) =>
+    request<ScenePageItem>({ url: '/admin/portal/scenes', method: 'post', data: payload }),
+  updateAdminScenePage: (id: number, payload: { slug: string; name: string; tagline: string; summary: string; description: string; sort_order: number; enabled: boolean }) =>
+    request<ScenePageItem>({ url: `/admin/portal/scenes/${id}`, method: 'put', data: payload }),
+  deleteAdminScenePage: (id: number) =>
+    sendWithoutData({ url: `/admin/portal/scenes/${id}`, method: 'delete' }),
+  getAdminRankingConfig: () => request<RankingConfigItem>({ url: '/admin/portal/rankings-config', method: 'get' }),
+  updateAdminRankingConfig: (payload: { title: string; subtitle: string; limit: number; enabled: boolean }) =>
+    request<RankingConfigItem>({ url: '/admin/portal/rankings-config', method: 'put', data: payload }),
+  getAdminSearchKeywords: (keywordType = '') =>
+    request<SearchKeywordConfigItem[]>({ url: '/admin/portal/search-keywords', method: 'get', params: { keyword_type: keywordType || undefined } }),
+  createAdminSearchKeyword: (payload: { query: string; keyword_type: string; sort_order: number; enabled: boolean }) =>
+    request<SearchKeywordConfigItem>({ url: '/admin/portal/search-keywords', method: 'post', data: payload }),
+  updateAdminSearchKeyword: (id: number, payload: { query: string; keyword_type: string; sort_order: number; enabled: boolean }) =>
+    request<SearchKeywordConfigItem>({ url: `/admin/portal/search-keywords/${id}`, method: 'put', data: payload }),
+  deleteAdminSearchKeyword: (id: number) =>
+    sendWithoutData({ url: `/admin/portal/search-keywords/${id}`, method: 'delete' }),
   getAdminFeaturedResources: () => request<FeaturedResourceItem[]>({ url: '/admin/portal/featured-resources', method: 'get' }),
-  createAdminFeaturedResource: (payload: { resource_type: string; resource_id: number; sort_order: number; enabled: boolean }) =>
+  createAdminFeaturedResource: (payload: { resource_type: string; resource_id: number; badge_label: string; sort_order: number; enabled: boolean }) =>
     request<FeaturedResourceItem>({ url: '/admin/portal/featured-resources', method: 'post', data: payload }),
-  updateAdminFeaturedResource: (id: number, payload: { resource_type: string; resource_id: number; sort_order: number; enabled: boolean }) =>
+  updateAdminFeaturedResource: (id: number, payload: { resource_type: string; resource_id: number; badge_label: string; sort_order: number; enabled: boolean }) =>
     request<FeaturedResourceItem>({ url: `/admin/portal/featured-resources/${id}`, method: 'put', data: payload }),
   deleteAdminFeaturedResource: (id: number) =>
     sendWithoutData({ url: `/admin/portal/featured-resources/${id}`, method: 'delete' }),
@@ -313,6 +400,17 @@ export const api = {
     request<DatasetPrivacyOptionItem>({ url: `/admin/content/privacy-options/${id}`, method: 'put', data: payload }),
   deleteAdminPrivacyOption: (id: number) =>
     sendWithoutData({ url: `/admin/content/privacy-options/${id}`, method: 'delete' }),
+  getAdminFilterOptions: (kind = '') =>
+    request<FilterOptionConfigItem[]>({ url: '/admin/content/filter-options', method: 'get', params: { kind: kind || undefined } }),
+  createAdminFilterOption: (payload: { kind: string; value: string; sort_order: number; enabled: boolean }) =>
+    request<FilterOptionConfigItem>({ url: '/admin/content/filter-options', method: 'post', data: payload }),
+  updateAdminFilterOption: (id: number, payload: { kind: string; value: string; sort_order: number; enabled: boolean }) =>
+    request<FilterOptionConfigItem>({ url: `/admin/content/filter-options/${id}`, method: 'put', data: payload }),
+  deleteAdminFilterOption: (id: number) =>
+    sendWithoutData({ url: `/admin/content/filter-options/${id}`, method: 'delete' }),
+  getAdminModelRecommendTags: () => request<AdminModelRecommendTagItem[]>({ url: '/admin/content/model-recommend-tags', method: 'get' }),
+  updateAdminModelRecommendTag: (id: number, payload: { recommend_tag: string }) =>
+    sendWithoutData({ url: `/admin/content/model-recommend-tags/${id}`, method: 'put', data: payload }),
   getAdminOperationLogs: () => request<AdminOperationLogItem[]>({ url: '/admin/operations', method: 'get' }),
   getAdminCommunityOverview: () => request<AdminCommunityOverview>({ url: '/admin/community/overview', method: 'get' }),
   getAdminCommunitySkills: () => request<AdminSkillModerationItem[]>({ url: '/admin/community/skills', method: 'get' }),
@@ -321,6 +419,20 @@ export const api = {
   removeAdminDiscussion: (id: number) => sendWithoutData({ url: `/admin/community/discussions/${id}/remove`, method: 'post' }),
   getAdminCommunityComments: () => request<AdminCommentModerationItem[]>({ url: '/admin/community/comments', method: 'get' }),
   removeAdminComment: (id: number) => sendWithoutData({ url: `/admin/community/comments/${id}/remove`, method: 'post' }),
+  getAdminCommunityConversations: () =>
+    request<AdminConversationModerationItem[]>({ url: '/admin/community/conversations', method: 'get' }),
+  blockAdminConversation: (id: number, payload: { reason: string }) =>
+    sendWithoutData({ url: `/admin/community/conversations/${id}/block`, method: 'post', data: payload }),
+  unblockAdminConversation: (id: number) =>
+    sendWithoutData({ url: `/admin/community/conversations/${id}/unblock`, method: 'post' }),
+  getAdminCommunityWorkspaces: () =>
+    request<AdminWorkspaceModerationItem[]>({ url: '/admin/community/workspaces', method: 'get' }),
+  blockAdminWorkspace: (id: number, payload: { reason: string }) =>
+    sendWithoutData({ url: `/admin/community/workspaces/${id}/block`, method: 'post', data: payload }),
+  unblockAdminWorkspace: (id: number) =>
+    sendWithoutData({ url: `/admin/community/workspaces/${id}/unblock`, method: 'post' }),
+  removeAdminWorkspaceMember: (id: number, payload: { user_id: number }) =>
+    sendWithoutData({ url: `/admin/community/workspaces/${id}/remove-member`, method: 'post', data: payload }),
   getAdminVerifications: () => request<AdminVerificationItem[]>({ url: '/admin/verifications', method: 'get' }),
   reviewAdminVerification: (id: number, payload: { decision: 'approved' | 'rejected'; comment: string }) =>
     sendWithoutData({ url: `/admin/verifications/${id}/decision`, method: 'post', data: payload }),

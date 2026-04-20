@@ -13,6 +13,7 @@ export interface UserSummary {
   username: string;
   email: string;
   role: string;
+  permissions?: string[];
   bio: string;
   avatar: string;
 }
@@ -35,8 +36,49 @@ export interface ModuleSettingItem {
   id?: number;
   module_key: string;
   label: string;
+  sort_order: number;
   enabled: boolean;
   updated_at?: string;
+}
+
+export interface HomeHighlightItem {
+  id: number;
+  text: string;
+  sort_order: number;
+  enabled: boolean;
+  updated_at: string;
+}
+
+export interface HomeHeroConfigItem {
+  id?: number;
+  tagline: string;
+  title: string;
+  description: string;
+  primary_button: string;
+  secondary_button: string;
+  search_button: string;
+  updated_at?: string;
+}
+
+export interface RankingConfigItem {
+  id?: number;
+  title: string;
+  subtitle: string;
+  limit: number;
+  enabled: boolean;
+  updated_at?: string;
+}
+
+export interface ScenePageItem {
+  id: number;
+  slug: string;
+  name: string;
+  tagline: string;
+  summary: string;
+  description: string;
+  sort_order: number;
+  enabled: boolean;
+  updated_at: string;
 }
 
 export interface FeaturedResourceItem {
@@ -46,6 +88,7 @@ export interface FeaturedResourceItem {
   title: string;
   summary: string;
   route: string;
+  badge_label: string;
   sort_order: number;
   enabled: boolean;
   updated_at: string;
@@ -59,9 +102,11 @@ export interface ResourceCard {
   type: string;
   tags: string[];
   robot_type?: string;
+  badge_label?: string;
   downloads: number;
   status?: string;
   owner?: string;
+  review_comment?: string;
   updated_at: string;
 }
 
@@ -75,6 +120,8 @@ export interface FileVersion {
 }
 
 export interface ModelDetail extends ResourceCard {
+  review_comment?: string;
+  recommend_tag?: string;
   input_spec: string;
   output_spec: string;
   license: string;
@@ -105,16 +152,41 @@ export interface DownloadPackageTaskItem {
 export interface DatasetAccessRequestItem {
   id: number;
   dataset_id: number;
+  dataset_name?: string;
+  dataset_privacy?: string;
+  dataset_owner_id?: number;
+  dataset_owner_name?: string;
   user_id: number;
   user_name?: string;
   reason: string;
   status: string;
   review_comment: string;
+  approval_stage: number;
+  required_approvals: number;
+  approval_expires_at?: string;
+  download_limit: number;
+  download_count: number;
+  remaining_downloads?: number;
+  is_expired: boolean;
+  authorization_active: boolean;
+  sla_hours: number;
+  sla_deadline_at?: string;
+  sla_overdue: boolean;
+  sla_remaining_minutes: number;
   reviewed_at?: string;
   created_at: string;
 }
 
+export interface BatchDatasetAccessDecisionPayload {
+  ids: number[];
+  decision: 'approved' | 'rejected';
+  comment: string;
+  valid_days: number;
+  download_limit: number;
+}
+
 export interface DatasetDetail extends ResourceCard {
+  review_comment?: string;
   sample_count: number;
   device: string;
   scene: string;
@@ -210,6 +282,17 @@ export interface DatasetOptionsResponse {
   privacy_options: DatasetPrivacyOptionItem[];
 }
 
+export interface FilterOptionsResponse {
+  tags: string[];
+  model_tags: string[];
+  dataset_tags: string[];
+  robot_types: string[];
+  dataset_scenes: string[];
+  template_categories: string[];
+  template_scenes: string[];
+  application_case_categories: string[];
+}
+
 export interface SearchItem {
   id: number;
   type: string;
@@ -221,15 +304,40 @@ export interface SearchItem {
   updated_at: string;
 }
 
+export interface SearchTypeCountItem {
+  type: string;
+  label: string;
+  count: number;
+}
+
+export interface SearchResponse extends Paginated<SearchItem> {
+  focus_type?: string;
+  type_counts: SearchTypeCountItem[];
+  same_type_items: SearchItem[];
+  related_items: SearchItem[];
+  suggested_queries: SearchSuggestionItem[];
+}
+
 export interface HomePayload {
   platform_intro: string;
+  hero_config: HomeHeroConfigItem;
   highlights: string[];
   announcements: AnnouncementItem[];
   hot_models: ResourceCard[];
   hot_datasets: ResourceCard[];
   task_templates: TaskTemplateItem[];
   application_cases: ApplicationCaseItem[];
+  scene_pages: ScenePageItem[];
   module_settings: ModuleSettingItem[];
+  rankings_config: RankingConfigItem;
+}
+
+export interface ScenePageDetailPayload {
+  scene: ScenePageItem;
+  models: ResourceCard[];
+  datasets: ResourceCard[];
+  task_templates: TaskTemplateItem[];
+  application_cases: ApplicationCaseItem[];
 }
 
 export interface Paginated<T> {
@@ -322,10 +430,11 @@ export interface DiscussionItem {
   title: string;
   summary: string;
   content: string;
-  category: string;
+  tag: string;
   user_id: number;
   user_name: string;
   comment_count: number;
+  hot_score: number;
   created_at: string;
   updated_at: string;
 }
@@ -348,6 +457,38 @@ export interface SearchHotItem {
   count: number;
 }
 
+export interface SearchSuggestionItem {
+  query: string;
+}
+
+export interface SearchKeywordConfigItem {
+  id: number;
+  query: string;
+  keyword_type: string;
+  sort_order: number;
+  enabled: boolean;
+  updated_at: string;
+}
+
+export interface FilterOptionConfigItem {
+  id: number;
+  kind: string;
+  value: string;
+  sort_order: number;
+  enabled: boolean;
+  updated_at: string;
+}
+
+export interface AdminModelRecommendTagItem {
+  id: number;
+  name: string;
+  summary: string;
+  recommend_tag: string;
+  status: string;
+  owner_name: string;
+  updated_at: string;
+}
+
 export interface UserContributionPayload {
   skills: SkillItem[];
   discussions: DiscussionItem[];
@@ -357,6 +498,30 @@ export interface AdminCommunityOverview {
   skills: number;
   discussions: number;
   comments: number;
+}
+
+export interface AdminConversationModerationItem {
+  id: number;
+  kind: string;
+  title: string;
+  participant_names: string[];
+  latest_message: string;
+  active: boolean;
+  blocked_reason: string;
+  updated_at: string;
+}
+
+export interface AdminWorkspaceModerationItem {
+  id: number;
+  name: string;
+  summary: string;
+  owner_id: number;
+  owner_name: string;
+  member_count: number;
+  members: FollowItem[];
+  active: boolean;
+  blocked_reason: string;
+  updated_at: string;
 }
 
 export interface AdminSkillModerationItem {
@@ -372,7 +537,7 @@ export interface AdminSkillModerationItem {
 export interface AdminDiscussionModerationItem {
   id: number;
   title: string;
-  category: string;
+  tag: string;
   user_id: number;
   user_name: string;
   comment_count: number;
@@ -561,6 +726,8 @@ export interface ConversationItem {
   workspace_id?: number;
   participant_names: string[];
   latest_message: string;
+  active: boolean;
+  blocked_reason: string;
   updated_at: string;
 }
 
@@ -571,6 +738,8 @@ export interface WorkspaceItem {
   owner_id: number;
   conversation_id: number;
   member_count: number;
+  active: boolean;
+  blocked_reason: string;
   updated_at: string;
 }
 
@@ -603,6 +772,7 @@ export interface NotificationRecord {
   Type: string;
   Title: string;
   Content: string;
+  Link?: string;
   Read: boolean;
   CreatedAt: string;
 }
