@@ -18,7 +18,7 @@
           </template>
 
           <div class="meta-line">身份：社区开发者主页</div>
-          <div class="meta-line">布局参考 GitHub 用户主页的资料侧栏与内容流结构。</div>
+          <div class="meta-line">用户主页的资料侧栏与内容流结构。</div>
         </UserProfileSidebar>
       </div>
 
@@ -29,7 +29,7 @@
               <div class="hero-kicker">Developer Profile</div>
               <h1 class="section-title hero-title">{{ user.username }} 的主页</h1>
               <p class="section-subtitle hero-subtitle">
-                这里不再只是一张开发者卡片，而是像 GitHub 个人主页一样，把身份信息、代表性内容和最近参与放在同一条浏览路径里。
+                这里不再只是一张开发者卡片，而是像开发个人主页一样，把身份信息、代表性内容和最近参与放在同一条浏览路径里。
               </p>
             </div>
             <a-space wrap>
@@ -66,7 +66,7 @@
                 <div class="section-head">
                   <div>
                     <h2 class="section-title sub-title">置顶技能</h2>
-                    <p class="section-subtitle">参考 GitHub pinned repositories 的方式，优先展示最能代表这个开发者能力边界的技能沉淀。</p>
+                    <p class="section-subtitle">优先展示最能代表这个开发者能力边界的技能沉淀。</p>
                   </div>
                 </div>
                 <div v-if="pinnedSkills.length" class="content-grid">
@@ -87,7 +87,7 @@
                 <div class="section-head">
                   <div>
                     <h2 class="section-title sub-title">最近讨论</h2>
-                    <p class="section-subtitle">像 GitHub 活动流一样，保留最近公开讨论，方便快速判断当前关注主题。</p>
+                    <p class="section-subtitle">像活动流一样，保留最近公开讨论，方便快速判断当前关注主题。</p>
                   </div>
                 </div>
                 <a-list :data-source="recentDiscussions" class="activity-list">

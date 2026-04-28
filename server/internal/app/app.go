@@ -25,7 +25,11 @@ type App struct {
 }
 
 func New() (*App, error) {
-	return newApp(config.Load())
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	return newApp(cfg)
 }
 
 func NewForTest(cfg config.Config) (*App, error) {
@@ -37,6 +41,10 @@ func (a *App) Run() error {
 }
 
 func newApp(cfg config.Config) (*App, error) {
+	if cfg.GinMode != "" {
+		gin.SetMode(cfg.GinMode)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
 		return nil, err
 	}

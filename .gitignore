@@ -42,6 +42,9 @@ Desktop.ini
 # Frontend
 node_modules/
 dist/
+!server/internal/frontend/
+!server/internal/frontend/dist/
+!server/internal/frontend/dist/index.html
 .vite/
 web/*.log
 pnpm-debug.log*

@@ -687,6 +687,8 @@ func (h *Handler) Register(router *gin.Engine) {
 			}
 		}
 	}
+
+	h.registerFrontend(router)
 }
 
 func (h *Handler) register(c *gin.Context) {

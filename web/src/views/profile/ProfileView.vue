@@ -4,7 +4,7 @@
       <div>
         <div class="page-kicker">Personal Profile</div>
         <h1 class="section-title">个人中心</h1>
-        <p class="section-subtitle">参考 GitHub 用户主页的信息层级，把身份、贡献、资源和管理操作集中到一张结构清晰的个人主页中。</p>
+        <p class="section-subtitle">用户主页的信息层级，把身份、贡献、资源和管理操作集中到一张结构清晰的个人主页中。</p>
       </div>
       <a-space wrap class="page-topbar-actions">
         <a-badge :count="unreadNotificationCount" :offset="[8, 2]">
@@ -44,7 +44,7 @@
               <div class="hero-kicker">Dashboard Snapshot</div>
               <h2 class="hero-title">把“我是谁、我做了什么、我还要处理什么”放到同一视图里</h2>
               <p class="hero-subtitle">
-                GitHub 用户主页的价值不只是看资料，而是把身份、代表性内容和最近活动压缩进同一条信息流。这里沿用这个思路来管理你的资源、通知和社区关系。
+                用户主页的价值不只是看资料，而是把身份、代表性内容和最近活动压缩进同一条信息流。这里沿用这个思路来管理你的资源、通知和社区关系。
               </p>
             </div>
             <div class="hero-stats">
@@ -72,7 +72,7 @@
           <div class="section-head">
             <div>
               <h2 class="section-title">我的空间</h2>
-              <p class="section-subtitle">保留当前所有管理能力，但按 GitHub 个人主页的浏览顺序重新整理内容层级。</p>
+              <p class="section-subtitle">保留当前所有管理能力，按个人主页的浏览顺序重新整理内容层级。</p>
             </div>
           </div>
 

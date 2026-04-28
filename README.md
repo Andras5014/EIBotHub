@@ -148,13 +148,15 @@ go vet ./...
 
 ## 默认配置
 
-后端默认配置位于 `server/internal/config/config.go`：
+后端默认配置位于 `server/internal/config/config.go`。部署包会优先读取
+`deploy/config.json`，也可以通过 `CONFIG_FILE` 指定其他 JSON 配置文件。
 
-- `APP_PORT`：服务端口，默认 `8080`
-- `DB_PATH`：数据库路径，默认 `server/data/opencommunity.db`
-- `STORAGE_DIR`：本地文件目录，默认 `server/storage`
-- `APP_SECRET`：本地 JWT/Token 密钥
-- `SEED_DEMO`：是否补充演示数据，默认 `true`
+- `port` / `APP_PORT`：服务端口，默认 `8080`
+- `db_path` / `DB_PATH`：数据库路径，默认 `server/data/opencommunity.db`
+- `storage_dir` / `STORAGE_DIR`：本地文件目录，默认 `server/storage`
+- `app_secret` / `APP_SECRET`：本地 JWT/Token 密钥
+- `seed_demo` / `SEED_DEMO`：是否补充演示数据，默认 `true`
+- `gin_mode` / `GIN_MODE`：Gin 运行模式，部署时建议 `release`
 
 前端开发服务器默认：
 
