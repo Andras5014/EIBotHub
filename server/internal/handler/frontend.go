@@ -45,11 +45,31 @@ func serveFrontendFile(c *gin.Context, dist fs.FS, requestPath string) {
 	if name == "." || name == "" {
 		name = "index.html"
 	}
+	if name == "index.html" {
+		serveFrontendIndex(c, dist)
+		return
+	}
 	if frontendFileExists(dist, name) {
 		c.FileFromFS(name, http.FS(dist))
 		return
 	}
-	c.FileFromFS("index.html", http.FS(dist))
+	serveFrontendIndex(c, dist)
+}
+
+func serveFrontendIndex(c *gin.Context, dist fs.FS) {
+	data, err := fs.ReadFile(dist, "index.html")
+	if err != nil {
+		support.RespondError(c, support.NewError(http.StatusNotFound, "not_found", "frontend entry not found"))
+		return
+	}
+
+	contentType := "text/html; charset=utf-8"
+	c.Header("Content-Type", contentType)
+	if c.Request.Method == http.MethodHead {
+		c.Status(http.StatusOK)
+		return
+	}
+	c.Data(http.StatusOK, contentType, data)
 }
 
 func frontendFileExists(dist fs.FS, name string) bool {

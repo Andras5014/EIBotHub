@@ -73,6 +73,23 @@ func TestHomeDashboardSeedData(t *testing.T) {
 	require.Contains(t, rankingResp.Body.String(), "ops")
 }
 
+func TestFrontendFallbackServesIndexWithoutRedirect(t *testing.T) {
+	app := newTestApp(t)
+
+	for _, target := range []string{"/", "/models", "/index.html"} {
+		resp := performRequest(t, app, http.MethodGet, target, nil, "", "")
+		require.Equal(t, http.StatusOK, resp.Code, target)
+		require.Empty(t, resp.Header().Get("Location"), target)
+		require.Contains(t, resp.Header().Get("Content-Type"), "text/html", target)
+		require.Contains(t, resp.Body.String(), "<!doctype html", target)
+	}
+
+	headResp := performRequest(t, app, http.MethodHead, "/", nil, "", "")
+	require.Equal(t, http.StatusOK, headResp.Code)
+	require.Empty(t, headResp.Header().Get("Location"))
+	require.Empty(t, headResp.Body.String())
+}
+
 func TestSeedDisplayDataCoverage(t *testing.T) {
 	app := newTestApp(t)
 
