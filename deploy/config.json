@@ -1,0 +1,8 @@
+{
+  "port": "8080",
+  "db_path": "./data/opencommunity.db",
+  "storage_dir": "./storage",
+  "app_secret": "change-me-before-production",
+  "seed_demo": true,
+  "gin_mode": "release"
+}

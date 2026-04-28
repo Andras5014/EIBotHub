@@ -1,0 +1,199 @@
+name: Build Packages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      push_image:
+        description: Push Docker image to GitHub Container Registry
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  executable:
+    name: Executable ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            binary: eibothub
+            package_dir: eibothub-linux-amd64
+            archive: eibothub-linux-amd64.tar.gz
+          - target: windows-amd64
+            os: windows-latest
+            goos: windows
+            goarch: amd64
+            binary: eibothub.exe
+            package_dir: eibothub-windows-amd64
+            archive: eibothub-windows-amd64.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Setup Windows C compiler
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+          path-type: inherit
+
+      - name: Add MinGW to PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Install web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web
+        working-directory: web
+        run: pnpm build
+
+      - name: Stage embedded web
+        shell: pwsh
+        run: |
+          if (Test-Path "server/internal/frontend/dist") {
+            Remove-Item -Recurse -Force "server/internal/frontend/dist"
+          }
+          New-Item -ItemType Directory -Force "server/internal/frontend/dist" | Out-Null
+          Copy-Item -Recurse "web/dist/*" "server/internal/frontend/dist/"
+
+      - name: Test and build backend
+        shell: pwsh
+        env:
+          CGO_ENABLED: '1'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          New-Item -ItemType Directory -Force "dist/${{ matrix.package_dir }}" | Out-Null
+          Push-Location server
+          go test ./...
+          go build -trimpath -ldflags="-s -w" -o "../dist/${{ matrix.package_dir }}/${{ matrix.binary }}" ./cmd/api
+          Pop-Location
+          Copy-Item -Recurse "deploy" "dist/${{ matrix.package_dir }}/deploy"
+          New-Item -ItemType Directory -Force "dist/${{ matrix.package_dir }}/data" | Out-Null
+          New-Item -ItemType Directory -Force "dist/${{ matrix.package_dir }}/storage" | Out-Null
+
+      - name: Set Linux package permissions
+        if: runner.os == 'Linux'
+        run: chmod +x "dist/${{ matrix.package_dir }}/${{ matrix.binary }}" "dist/${{ matrix.package_dir }}/deploy/start-linux.sh"
+
+      - name: Archive Linux package
+        if: runner.os == 'Linux'
+        run: tar -czf "dist/${{ matrix.archive }}" -C "dist/${{ matrix.package_dir }}" .
+
+      - name: Archive Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "dist/${{ matrix.package_dir }}/*" -DestinationPath "dist/${{ matrix.archive }}"
+
+      - name: Upload executable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package_dir }}
+          path: dist/${{ matrix.archive }}
+          if-no-files-found: error
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,format=short
+
+      - name: Build Docker image tar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          tags: ${{ steps.image.outputs.name }}:ci
+          outputs: type=docker,dest=${{ runner.temp }}/eibothub-docker-image.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Upload Docker image tar
+        uses: actions/upload-artifact@v4
+        with:
+          name: eibothub-docker-image
+          path: ${{ runner.temp }}/eibothub-docker-image.tar
+          if-no-files-found: error
+
+      - name: Login to GHCR
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.push_image)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Docker image
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.push_image)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
