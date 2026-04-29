@@ -60,20 +60,21 @@ const submitting = ref(false);
 const registering = ref(false);
 
 const form = reactive({
-  email: 'demo@example.com',
-  password: 'Demo123!',
+  email: '',
+  password: '',
 });
 
 const registerForm = reactive({
-  username: 'new-user',
-  email: 'new-user@example.com',
-  password: 'Change123!',
+  username: '',
+  email: '',
+  password: '',
 });
 
 async function submit() {
   submitting.value = true;
   try {
     await auth.login(form);
+    await auth.refreshMe();
     message.success('登录成功');
     await router.push(String(route.query.redirect ?? '/'));
   } catch (error) {
@@ -87,6 +88,7 @@ async function register() {
   submitting.value = true;
   try {
     await auth.register(registerForm);
+    await auth.refreshMe();
     message.success('注册成功');
     await router.push('/');
   } catch (error) {
