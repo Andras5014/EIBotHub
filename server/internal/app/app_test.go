@@ -1365,6 +1365,45 @@ func TestV1FollowCreatesNotificationAndFollowersList(t *testing.T) {
 	require.Contains(t, notificationsResp.Body.String(), "你有新的关注者")
 }
 
+func TestReadSingleNotificationFlow(t *testing.T) {
+	app := newTestApp(t)
+	userToken := loginToken(t, app, "demo@example.com", "Demo123!")
+	adminToken := loginToken(t, app, "admin@opencommunity.local", "Admin123!")
+
+	var demo model.User
+	require.NoError(t, app.DB.Where("email = ?", "demo@example.com").First(&demo).Error)
+
+	target := model.Notification{
+		UserID:  demo.ID,
+		Type:    "message",
+		Title:   "单条已读测试通知",
+		Content: "点击后应只标记当前通知为已读。",
+		Read:    false,
+	}
+	other := model.Notification{
+		UserID:  demo.ID,
+		Type:    "message",
+		Title:   "保留未读通知",
+		Content: "用于验证不会误改其他通知。",
+		Read:    false,
+	}
+	require.NoError(t, app.DB.Create(&target).Error)
+	require.NoError(t, app.DB.Create(&other).Error)
+
+	readResp := performRequest(t, app, http.MethodPost, "/api/v1/users/me/notifications/"+strconv.Itoa(int(target.ID))+"/read", nil, userToken, "")
+	require.Equal(t, http.StatusOK, readResp.Code)
+
+	var targetAfter model.Notification
+	var otherAfter model.Notification
+	require.NoError(t, app.DB.First(&targetAfter, target.ID).Error)
+	require.NoError(t, app.DB.First(&otherAfter, other.ID).Error)
+	require.True(t, targetAfter.Read)
+	require.False(t, otherAfter.Read)
+
+	forbiddenResp := performRequest(t, app, http.MethodPost, "/api/v1/users/me/notifications/"+strconv.Itoa(int(target.ID))+"/read", nil, adminToken, "")
+	require.Equal(t, http.StatusNotFound, forbiddenResp.Code)
+}
+
 func TestV2DeveloperVerificationFlow(t *testing.T) {
 	app := newTestApp(t)
 	userToken := loginToken(t, app, "demo@example.com", "Demo123!")

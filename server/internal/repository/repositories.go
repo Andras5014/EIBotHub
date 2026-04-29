@@ -936,6 +936,17 @@ func (r *UserActivityRepository) ListNotifications(userID uint) ([]model.Notific
 	return items, err
 }
 
+func (r *UserActivityRepository) MarkNotificationRead(userID, notificationID uint) error {
+	var item model.Notification
+	if err := r.db.Where("user_id = ? AND id = ?", userID, notificationID).First(&item).Error; err != nil {
+		return err
+	}
+	if item.Read {
+		return nil
+	}
+	return r.db.Model(&item).Update("read", true).Error
+}
+
 func (r *UserActivityRepository) MarkNotificationsRead(userID uint) error {
 	return r.db.Model(&model.Notification{}).Where("user_id = ?", userID).Update("read", true).Error
 }

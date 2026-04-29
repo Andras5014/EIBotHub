@@ -68,7 +68,7 @@
                 </div>
               </div>
             </template>
-            <a-badge :count="unreadCount" :offset="[6, 2]">
+            <a-badge class="nav-action-badge" :count="unreadCount" :offset="[-18, 2]">
               <a-button>提醒</a-button>
             </a-badge>
           </a-popover>
@@ -101,26 +101,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
+import { storeToRefs } from 'pinia';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 
-import { api } from '@/api';
 import BrandLogo from '@/components/BrandLogo.vue';
 import { PERMISSIONS } from '@/constants/permissions';
 import { useAuthStore } from '@/stores/auth';
+import { useNotificationStore } from '@/stores/notifications';
 import type { NotificationRecord } from '@/types/api';
 
 const auth = useAuthStore();
+const notificationStore = useNotificationStore();
 const route = useRoute();
 const router = useRouter();
-const notifications = ref<NotificationRecord[]>([]);
-
-const unreadCount = computed(() => notifications.value.filter((item) => !item.Read).length);
-const notificationPreviewItems = computed(() => {
-  const unreadItems = notifications.value.filter((item) => !item.Read);
-  return (unreadItems.length ? unreadItems : notifications.value).slice(0, 5);
-});
+const { unreadCount, notificationPreviewItems } = storeToRefs(notificationStore);
 
 const navItems = [
   { label: '首页', to: '/' },
@@ -144,29 +140,13 @@ const adminEntryRoute = computed(() => {
   return '/admin';
 });
 
-async function loadNotifications() {
-  if (!auth.isAuthenticated) {
-    notifications.value = [];
-    return;
-  }
-  try {
-    notifications.value = await api.getNotifications();
-  } catch {
-    notifications.value = [];
-  }
-}
-
 watch(
   () => [auth.isAuthenticated, route.fullPath],
   async () => {
-    await loadNotifications();
+    await notificationStore.loadNotifications();
   },
   { immediate: true },
 );
-
-onMounted(async () => {
-  await loadNotifications();
-});
 
 function handleMoreMenuClick({ key }: { key: string | number }) {
   void router.push(String(key));
@@ -176,7 +156,7 @@ async function handleUserMenuClick({ key }: { key: string | number }) {
   const action = String(key);
   if (action === 'logout') {
     await auth.logout();
-    notifications.value = [];
+    notificationStore.reset();
     await router.push('/');
     return;
   }
@@ -197,8 +177,7 @@ async function handleUserMenuClick({ key }: { key: string | number }) {
 
 async function markNotificationsRead() {
   if (!unreadCount.value) return;
-  await api.readNotifications();
-  await loadNotifications();
+  await notificationStore.markAllRead();
   message.success('通知已标记已读');
 }
 
@@ -206,7 +185,12 @@ function openNotificationCenter() {
   void router.push({ path: '/me', query: { tab: 'community', subtab: 'notifications' } });
 }
 
-function openNotificationItem(item: NotificationRecord) {
+async function openNotificationItem(item: NotificationRecord) {
+  try {
+    await notificationStore.markRead(item.ID);
+  } catch {
+    message.error('通知状态更新失败');
+  }
   if (item.Link) {
     void router.push(item.Link);
     return;
@@ -278,6 +262,10 @@ function formatDate(value: string) {
 
 .nav-actions {
   flex: none;
+}
+
+.nav-action-badge {
+  padding-right: 18px;
 }
 
 .notification-preview {

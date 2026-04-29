@@ -1,12 +1,14 @@
 package service
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/Andras5014/EIBotHub/server/internal/dto"
 	"github.com/Andras5014/EIBotHub/server/internal/model"
 	"github.com/Andras5014/EIBotHub/server/internal/repository"
 	"github.com/Andras5014/EIBotHub/server/internal/support"
+	"gorm.io/gorm"
 )
 
 type UserService struct {
@@ -82,6 +84,16 @@ func (s *UserService) Downloads(userID uint) ([]model.DownloadRecord, error) {
 
 func (s *UserService) Notifications(userID uint) ([]model.Notification, error) {
 	return s.activity.ListNotifications(userID)
+}
+
+func (s *UserService) MarkNotificationRead(userID, notificationID uint) error {
+	if err := s.activity.MarkNotificationRead(userID, notificationID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return support.NewError(http.StatusNotFound, "notification_not_found", "notification not found")
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *UserService) MarkNotificationsRead(userID uint) error {

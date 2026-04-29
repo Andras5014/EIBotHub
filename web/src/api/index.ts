@@ -263,6 +263,7 @@ export const api = {
     sendWithoutData({ url: '/favorites/toggle', method: 'post', data: payload }),
   getDownloads: () => request<DownloadRecord[]>({ url: '/users/me/downloads', method: 'get' }),
   getNotifications: () => request<NotificationRecord[]>({ url: '/users/me/notifications', method: 'get' }),
+  readNotification: (id: number) => sendWithoutData({ url: `/users/me/notifications/${id}/read`, method: 'post' }),
   readNotifications: () => sendWithoutData({ url: '/users/me/notifications/read', method: 'post' }),
   applyVerification: (payload: { verification_type: 'personal' | 'enterprise'; real_name: string; organization: string; materials: string; reason: string }) =>
     request<VerificationStatusItem>({ url: '/developer-verifications', method: 'post', data: payload }),

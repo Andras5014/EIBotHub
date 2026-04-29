@@ -26,11 +26,12 @@
                   <a-list-item-meta>
                     <template #title>
                       <a-space wrap>
-                        <span>{{ item.title || item.participant_names.join(' / ') }}</span>
+                        <span>{{ conversationLabel(item) }}</span>
                         <a-tag :color="item.active ? 'green' : 'red'">{{ item.active ? '正常' : '已封禁' }}</a-tag>
                       </a-space>
                     </template>
                     <template #description>
+                      <div class="participant-text">参与人：{{ participantSummary(item.participant_names) }}</div>
                       <div>{{ item.latest_message || '暂无消息' }}</div>
                       <div v-if="item.blocked_reason" class="blocked-text">封禁原因：{{ item.blocked_reason }}</div>
                     </template>
@@ -45,7 +46,7 @@
             <template v-if="selectedConversation">
               <a-space wrap style="margin-bottom: 12px">
                 <span class="pill-meta">会话类型：{{ selectedConversation.kind }}</span>
-                <span v-for="name in selectedConversation.participant_names" :key="name" class="pill-meta">{{ name }}</span>
+                <span class="pill-meta">参与人：{{ participantSummary(selectedConversation.participant_names) }}</span>
                 <a-tag :color="selectedConversation.active ? 'green' : 'red'">
                   {{ selectedConversation.active ? '正常' : '已封禁' }}
                 </a-tag>
@@ -197,6 +198,23 @@ onMounted(async () => {
 function formatDate(value: string) {
   return new Date(value).toLocaleString();
 }
+
+function conversationLabel(item: ConversationItem) {
+  if (item.kind === 'direct' && item.participant_names.length > 0) {
+    return item.participant_names.join(' / ');
+  }
+  if (item.title) {
+    return item.title;
+  }
+  if (item.participant_names.length > 0) {
+    return item.participant_names.join(' / ');
+  }
+  return '未命名会话';
+}
+
+function participantSummary(names: string[]) {
+  return names.length > 0 ? names.join('、') : '暂无';
+}
 </script>
 
 <style scoped>
@@ -216,5 +234,9 @@ function formatDate(value: string) {
 .blocked-text {
   margin-top: 4px;
   color: #cf1322;
+}
+
+.participant-text {
+  color: var(--text-secondary);
 }
 </style>

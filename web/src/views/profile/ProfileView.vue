@@ -7,7 +7,7 @@
         <p class="section-subtitle">用户主页的信息层级，把身份、贡献、资源和管理操作集中到一张结构清晰的个人主页中。</p>
       </div>
       <a-space wrap class="page-topbar-actions">
-        <a-badge :count="unreadNotificationCount" :offset="[8, 2]">
+        <a-badge class="page-topbar-badge" :count="unreadNotificationCount" :offset="[-18, 10]">
           <a-button @click="openNotificationCenter">通知中心</a-button>
         </a-badge>
         <a-button type="primary" @click="openProfileSettings()">个人设置</a-button>
@@ -467,11 +467,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
+import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 
 import { api } from '@/api';
 import UserProfileSidebar from '@/components/UserProfileSidebar.vue';
 import { useAuthStore } from '@/stores/auth';
+import { useNotificationStore } from '@/stores/notifications';
 import type {
   ContributorRankingItem,
   DatasetAccessRequestItem,
@@ -490,8 +492,10 @@ import type {
 } from '@/types/api';
 
 const auth = useAuthStore();
+const notificationStore = useNotificationStore();
 const route = useRoute();
 const router = useRouter();
+const { notifications, unreadCount: unreadNotificationCount } = storeToRefs(notificationStore);
 const mainTab = ref('overview');
 const communityTab = ref('skills');
 const profileSettingsOpen = ref(false);
@@ -510,7 +514,6 @@ const uploads = reactive<{ models: ResourceCard[]; datasets: ResourceCard[] }>({
 const favorites = ref<FavoriteRecord[]>([]);
 const downloads = ref<DownloadRecord[]>([]);
 const accessRequests = ref<DatasetAccessRequestItem[]>([]);
-const notifications = ref<NotificationRecord[]>([]);
 const rewardSummary = ref<RewardSummary>({ points: 0 });
 const rewardLedger = ref<RewardLedgerItem[]>([]);
 const rewardBenefits = ref<RewardBenefitItem[]>([]);
@@ -557,7 +560,6 @@ const accessRequestStatusOptions = [
 const filteredModels = computed(() => filterByStatus(uploads.models, modelStatusFilter.value));
 const filteredDatasets = computed(() => filterByStatus(uploads.datasets, datasetStatusFilter.value));
 const filteredAccessRequests = computed(() => filterByStatus(accessRequests.value, accessRequestStatusFilter.value));
-const unreadNotificationCount = computed(() => notifications.value.filter((item) => !item.Read).length);
 const profileBadges = computed(() => {
   const badges = [
     { text: auth.user?.role === 'admin' ? '管理员' : '开发者', color: auth.user?.role === 'admin' ? 'volcano' : 'blue' },
@@ -590,7 +592,7 @@ async function load() {
   favorites.value = await api.getFavorites();
   downloads.value = await api.getDownloads();
   accessRequests.value = await api.getMyDatasetAccessRequests();
-  notifications.value = await api.getNotifications();
+  await notificationStore.loadNotifications();
   rewardSummary.value = await api.myRewardSummary();
   rewardLedger.value = await api.myRewardLedger();
   rewardBenefits.value = await api.rewardBenefits();
@@ -612,8 +614,8 @@ async function saveProfile() {
 }
 
 async function markNotificationsRead() {
-  await api.readNotifications();
-  await load();
+  if (!unreadNotificationCount.value) return;
+  await notificationStore.markAllRead();
   message.success('通知已标记已读');
 }
 
@@ -676,6 +678,7 @@ async function submitVerification() {
 
 async function logout() {
   await auth.logout();
+  notificationStore.reset();
   router.push('/');
 }
 
@@ -784,7 +787,12 @@ function notificationTypeLabel(value: string) {
   }[value] ?? value;
 }
 
-function openNotificationItem(item: NotificationRecord) {
+async function openNotificationItem(item: NotificationRecord) {
+  try {
+    await notificationStore.markRead(item.ID);
+  } catch {
+    message.error('通知状态更新失败');
+  }
   if (item.Link) {
     void router.push(item.Link);
     return;
@@ -836,6 +844,10 @@ onMounted(load);
 
 .page-topbar-actions {
   flex: none;
+}
+
+.page-topbar-badge {
+  padding-right: 18px;
 }
 
 .page-kicker {

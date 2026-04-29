@@ -407,6 +407,7 @@ func (h *Handler) Register(router *gin.Engine) {
 			secured.GET("/users/me/downloads", h.myDownloads)
 			secured.GET("/users/me/notifications", h.myNotifications)
 			secured.POST("/users/me/notifications/read", h.readNotifications)
+			secured.POST("/users/me/notifications/:id/read", h.readNotification)
 
 			secured.POST("/models", h.createModel)
 			secured.PUT("/models/:id", h.updateModel)
@@ -1320,6 +1321,15 @@ func (h *Handler) readNotifications(c *gin.Context) {
 		return
 	}
 	support.RespondMessage(c, "notifications marked as read", nil)
+}
+
+func (h *Handler) readNotification(c *gin.Context) {
+	claims := middleware.MustClaims(c)
+	if err := h.users.MarkNotificationRead(claims.UserID, parseUintParam(c, "id")); err != nil {
+		support.RespondError(c, err)
+		return
+	}
+	support.RespondMessage(c, "notification marked as read", nil)
 }
 
 func (h *Handler) adminDashboard(c *gin.Context) {
